@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keycloak Test Stand (GovApps)</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-layout">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <div class="logo-badge">KC</div>
+          <div>
+            <h1 class="app-title">Keycloak Auth Test Stand</h1>
+            <p class="app-subtitle">Independent Authentication & Token Inspector</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="meta-tag">
+            <span class="meta-label">Realm:</span>
+            <span class="meta-value" id="meta-realm">GovApps</span>
+          </div>
+          <div class="meta-tag">
+            <span class="meta-label">Client:</span>
+            <span class="meta-value" id="meta-client">test-app</span>
+          </div>
+          <div class="status-indicator" id="status-indicator">
+            <span class="status-dot"></span>
+            <span class="status-text">Connected</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Container -->
+      <main class="app-main">
+        <!-- Loading State -->
+        <div id="loading-view" class="card loading-card">
+          <div class="spinner"></div>
+          <p>Initializing Keycloak OIDC session...</p>
+        </div>
+
+        <!-- Unauthenticated State -->
+        <div id="unauth-view" class="view-grid hidden">
+          <!-- Flow 1: Standard Redirect (Auth Code + PKCE) -->
+          <div class="card hero-card">
+            <div class="card-tag">Recommended Standard Flow</div>
+            <h2 class="card-title">Browser Redirect Login</h2>
+            <p class="card-desc">
+              Authenticates using the standard OpenID Connect <b>Authorization Code Flow with PKCE</b>.
+              Redirects to Keycloak's login screen and returns with JWT tokens.
+            </p>
+
+            <div class="users-hint">
+              <span class="hint-title">Available test users in GovApps:</span>
+              <div class="user-pill-list">
+                <span class="user-pill">aitu3 (password: <code>password</code>)</span>
+                <span class="user-pill">aitu4 (password: <code>password</code>)</span>
+              </div>
+            </div>
+
+            <button id="btn-login" class="btn btn-primary btn-lg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>
+              </svg>
+              Login via Keycloak
+            </button>
+          </div>
+
+          <!-- Flow 2: Alem Spring Boot BFF Gateway (Login + 2FA Precheck + Register) -->
+          <div class="card gateway-card">
+            <div class="gateway-header">
+              <div class="card-tag card-tag-purple">BFF Gateway (Spring Boot :8080)</div>
+              <div class="bff-status-pill">
+                <span class="status-dot"></span>
+                <span>Alem Service</span>
+              </div>
+            </div>
+
+            <h2 class="card-title">Alem Auth Gateway</h2>
+            <p class="card-desc">
+              Все запросы авторизации и регистрации отправляются через бэкенд <code>http://localhost:8080/api/auth/*</code> в Keycloak.
+            </p>
+
+            <!-- Auth Mode Tabs: Login vs Register -->
+            <div class="auth-tabs">
+              <button type="button" class="auth-tab-btn active" id="tab-btn-login">Вход (Login)</button>
+              <button type="button" class="auth-tab-btn" id="tab-btn-register">Регистрация (Register)</button>
+            </div>
+
+            <!-- TAB 1: Direct Login Form -->
+            <div id="auth-pane-login" class="auth-pane">
+              <form id="direct-auth-form" class="direct-form">
+                <div class="quick-pick">
+                  <label>Quick Fill:</label>
+                  <button type="button" class="btn-chip" data-user="aitu3">aitu3 (2FA on)</button>
+                  <button type="button" class="btn-chip" data-user="aitu4">aitu4 (no 2FA)</button>
+                  <button type="button" class="btn-chip" data-user="alemtest1">alemtest1</button>
+                </div>
+
+                <!-- Username Group with 2FA Status Indicator -->
+                <div class="form-group">
+                  <label for="direct-username">Username</label>
+                  <input type="text" id="direct-username" value="aitu3" required autocomplete="username" />
+                  <div id="user-2fa-status" class="user-status-pill status-loading">
+                    <span class="status-icon">🔄</span>
+                    <span class="status-msg">Checking 2FA via Alem...</span>
+                  </div>
+                </div>
+
+                <!-- Password Group -->
+                <div class="form-group">
+                  <label for="direct-password">Password</label>
+                  <input type="password" id="direct-password" value="password" required autocomplete="current-password" />
+                </div>
+
+                <!-- 2FA OTP Group (Visible only if has2fa === true) -->
+                <div id="direct-totp-group" class="totp-group hidden">
+                  <div class="otp-notice">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                      <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                    </svg>
+                    <div>
+                      <strong>Google Authenticator Code Required</strong>
+                      <p>User <span id="otp-user-display" class="highlight-user">aitu3</span> has 2FA enabled. Enter the 6-digit code for account <b>GovApps (aitu3)</b>.</p>
+                    </div>
+                  </div>
+
+                  <div class="form-group" style="margin-top: 12px;">
+                    <label for="direct-totp">6-digit Code (Google Authenticator)</label>
+                    <input
+                      type="text"
+                      id="direct-totp"
+                      class="otp-input"
+                      maxlength="6"
+                      pattern="[0-9]*"
+                      inputmode="numeric"
+                      placeholder="000000"
+                    />
+                  </div>
+                </div>
+
+                <!-- 2FA Setup Onboarding Group (Visible only if needs2faSetup === true) -->
+                <div id="direct-setup-group" class="setup-group hidden">
+                  <div class="setup-notice">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <div>
+                      <strong>Первичная настройка 2FA (Google Authenticator)</strong>
+                      <p>Для вашего аккаунта включена обязательная 2FA. Отсканируйте официальный QR-код для привязки Google Authenticator.</p>
+                    </div>
+                  </div>
+                  <button type="button" id="btn-setup-2fa" class="btn btn-warning btn-block" style="margin-top: 10px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="7" height="7"/>
+                      <rect x="14" y="3" width="7" height="7"/>
+                      <rect x="14" y="14" width="7" height="7"/>
+                      <rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                    Настроить 2FA (Показать QR-код)
+                  </button>
+                  <p class="setup-hint">После подтверждения кода в окне настройки вы сможете сразу войти в систему.</p>
+                </div>
+
+                <div id="direct-error" class="form-error hidden"></div>
+
+                <button type="submit" id="btn-direct-submit" class="btn btn-primary btn-block">
+                  Sign in via Alem (POST /login)
+                </button>
+              </form>
+            </div>
+
+            <!-- TAB 2: Register Form -->
+            <div id="auth-pane-register" class="auth-pane hidden">
+              <form id="register-form" class="direct-form">
+                <div class="form-group">
+                  <label for="reg-username">Username *</label>
+                  <input type="text" id="reg-username" required placeholder="например: user_test" autocomplete="username" />
+                </div>
+
+                <div class="form-group">
+                  <label for="reg-email">Email *</label>
+                  <input type="email" id="reg-email" required placeholder="user@example.com" autocomplete="email" />
+                </div>
+
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="reg-firstname">First Name</label>
+                    <input type="text" id="reg-firstname" placeholder="Иван" />
+                  </div>
+                  <div class="form-group">
+                    <label for="reg-lastname">Last Name</label>
+                    <input type="text" id="reg-lastname" placeholder="Иванов" />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="reg-password">Password *</label>
+                  <input type="password" id="reg-password" required placeholder="Пароль пользователя" autocomplete="new-password" />
+                </div>
+
+                <div id="reg-error" class="form-error hidden"></div>
+                <div id="reg-success" class="form-success hidden"></div>
+
+                <button type="submit" id="btn-register-submit" class="btn btn-primary btn-block">
+                  Register in Keycloak (POST /register)
+                </button>
+              </form>
+            </div>
+
+            <div id="direct-login-result" class="direct-result hidden">
+              <div class="result-header">
+                <span>Alem Gateway Token Response:</span>
+                <span id="result-status-badge" class="badge badge-success">Success</span>
+              </div>
+              <pre><code id="direct-json"></code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Authenticated State -->
+        <div id="auth-view" class="auth-container hidden">
+          <!-- User Profile Card -->
+          <div class="card profile-card">
+            <div class="profile-left">
+              <div class="avatar" id="user-avatar">?</div>
+              <div class="profile-info">
+                <div class="name-row">
+                  <h2 class="user-name" id="user-name">—</h2>
+                  <span class="badge badge-success">Authenticated</span>
+                  <span class="badge badge-verified" id="badge-verified">Email Verified</span>
+                </div>
+                <div class="meta-row">
+                  <span class="user-username" id="user-username">@—</span>
+                  <span class="dot-separator">•</span>
+                  <span class="user-email" id="user-email">—</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions Bar -->
+            <div class="profile-actions">
+              <div class="expiry-counter">
+                <div class="expiry-label">Access Token Expires in</div>
+                <div class="expiry-time" id="expiry-timer">00:00</div>
+              </div>
+
+              <button id="btn-refresh" class="btn btn-outline" title="Refresh token now">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+                Refresh Token
+              </button>
+
+              <button id="btn-copy-token" class="btn btn-outline" title="Copy raw JWT">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Token
+              </button>
+
+              <button id="btn-jwt-io" class="btn btn-outline" title="Inspect on jwt.io">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
+                </svg>
+                jwt.io
+              </button>
+
+              <button id="btn-logout" class="btn btn-danger">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+                </svg>
+                Logout
+              </button>
+            </div>
+          </div>
+
+          <!-- Highlight Claims Grid -->
+          <div class="claims-grid">
+            <div class="claim-card claim-audience">
+              <div class="claim-title">
+                <span>Audience (<code>aud</code>)</span>
+                <span class="badge badge-accent">Mapped Target</span>
+              </div>
+              <div class="claim-content" id="claim-aud">—</div>
+              <p class="claim-hint">Verified by Resource Servers to authorize incoming API calls.</p>
+            </div>
+
+            <div class="claim-card">
+              <div class="claim-title">
+                <span>Subject ID (<code>sub</code>)</span>
+              </div>
+              <div class="claim-content monospace" id="claim-sub">—</div>
+              <p class="claim-hint">Unique Keycloak internal user identifier.</p>
+            </div>
+
+            <div class="claim-card">
+              <div class="claim-title">
+                <span>Realm Roles</span>
+              </div>
+              <div class="claim-content" id="claim-roles">—</div>
+              <p class="claim-hint">Assigned roles in realm <code>GovApps</code>.</p>
+            </div>
+
+            <div class="claim-card">
+              <div class="claim-title">
+                <span>Issuer (<code>iss</code>)</span>
+              </div>
+              <div class="claim-content monospace" id="claim-iss">—</div>
+              <p class="claim-hint">Originating Keycloak authority URL.</p>
+            </div>
+          </div>
+
+          <!-- Token Inspector Tabs -->
+          <div class="card inspector-card">
+            <div class="tab-header">
+              <button class="tab-btn active" data-tab="tab-access">Decoded Access Token</button>
+              <button class="tab-btn" data-tab="tab-id">Decoded ID Token</button>
+              <button class="tab-btn" data-tab="tab-raw">Raw JWT Strings</button>
+            </div>
+
+            <div class="tab-body">
+              <div id="tab-access" class="tab-pane active">
+                <pre><code id="json-access" class="json-code"></code></pre>
+              </div>
+              <div id="tab-id" class="tab-pane">
+                <div class="jwks-verify-header">
+                  <div class="jwks-verify-actions">
+                    <button type="button" id="btn-verify-id" class="btn btn-primary btn-sm">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="m9 12 2 2 4-4"/>
+                      </svg>
+                      Verify Signature via JWKS
+                    </button>
+                    <a href="http://localhost:8080/api/auth/jwks" target="_blank" class="btn btn-outline btn-sm">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
+                      </svg>
+                      Public JWKS Endpoint
+                    </a>
+                  </div>
+                  <div id="verify-status-pill" class="verify-pill hidden"></div>
+                </div>
+
+                <div id="verify-details-box" class="verify-details-box hidden">
+                  <div class="verify-grid">
+                    <div class="verify-item">
+                      <span class="verify-label">Algorithm:</span>
+                      <span id="verify-alg" class="verify-val badge-accent">—</span>
+                    </div>
+                    <div class="verify-item">
+                      <span class="verify-label">Key ID (kid):</span>
+                      <code id="verify-kid" class="verify-val">—</code>
+                    </div>
+                    <div class="verify-item">
+                      <span class="verify-label">Issuer:</span>
+                      <span id="verify-iss" class="verify-val">—</span>
+                    </div>
+                    <div class="verify-item">
+                      <span class="verify-label">Subject:</span>
+                      <code id="verify-sub" class="verify-val">—</code>
+                    </div>
+                  </div>
+                  <div class="verify-msg-row">
+                    <span class="verify-label">Result:</span>
+                    <span id="verify-msg" class="verify-msg-text">—</span>
+                  </div>
+                </div>
+
+                <pre><code id="json-id" class="json-code"></code></pre>
+              </div>
+              <div id="tab-raw" class="tab-pane">
+                <div class="raw-token-block">
+                  <div class="raw-title">Access Token (Bearer):</div>
+                  <textarea id="raw-access" readonly rows="4"></textarea>
+                </div>
+                <div class="raw-token-block">
+                  <div class="raw-title">Refresh Token:</div>
+                  <textarea id="raw-refresh" readonly rows="4"></textarea>
+                </div>
+                <div class="raw-token-block">
+                  <div class="raw-title-row">
+                    <div class="raw-title">ID Token (OIDC):</div>
+                    <button type="button" id="btn-verify-raw-id" class="btn btn-outline btn-sm">Verify via JWKS</button>
+                  </div>
+                  <textarea id="raw-id" readonly rows="4"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
