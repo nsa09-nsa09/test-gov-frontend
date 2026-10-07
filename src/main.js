@@ -8,6 +8,7 @@ const KEYCLOAK_CONFIG = {
 
 // Alem Spring Boot BFF Gateway URL
 const ALEM_API_BASE = 'http://localhost:8080/api/auth';
+const SECOND_API_BASE = 'http://localhost:8081/api';
 
 const keycloak = new Keycloak(KEYCLOAK_CONFIG);
 
@@ -22,6 +23,33 @@ const btnLogout = document.getElementById('btn-logout');
 const btnRefresh = document.getElementById('btn-refresh');
 const btnCopyToken = document.getElementById('btn-copy-token');
 const btnJwtIo = document.getElementById('btn-jwt-io');
+
+// DOM Elements: Second Backend Integration
+const btnExchangeSecond = document.getElementById('btn-exchange-second');
+const btnExchangeAccess = document.getElementById('btn-exchange-access');
+const btnTestSecondApi = document.getElementById('btn-test-second-api');
+const btnRefreshSecond = document.getElementById('btn-refresh-second');
+const secondStatusPill = document.getElementById('second-status-pill');
+const secondStatusText = document.getElementById('second-status-text');
+const secondExchangeError = document.getElementById('second-exchange-error');
+const secondExchangeResult = document.getElementById('second-exchange-result');
+const secondExchangeBadge = document.getElementById('second-exchange-badge');
+const secondMetaIss = document.getElementById('second-meta-iss');
+const secondMetaAud = document.getElementById('second-meta-aud');
+const secondMetaSub = document.getElementById('second-meta-sub');
+const secondMetaUser = document.getElementById('second-meta-user');
+const secondMetaExp = document.getElementById('second-meta-exp');
+const secondMetaRefreshExp = document.getElementById('second-meta-refresh-exp');
+const rawSecondAccess = document.getElementById('raw-second-access');
+const rawSecondRefresh = document.getElementById('raw-second-refresh');
+const btnCopySecondAccess = document.getElementById('btn-copy-second-access');
+const btnCopySecondRefresh = document.getElementById('btn-copy-second-refresh');
+const jsonSecondAccess = document.getElementById('json-second-access');
+const secondApiResponseCard = document.getElementById('second-api-response-card');
+const secondApiStatusBadge = document.getElementById('second-api-status-badge');
+const jsonSecondApiResponse = document.getElementById('json-second-api-response');
+
+let secondSession = null;
 
 const userName = document.getElementById('user-name');
 const userUsername = document.getElementById('user-username');
@@ -140,12 +168,26 @@ async function init() {
   }
 }
 
+function resetSecondBackendUI() {
+  secondSession = null;
+  secondExchangeResult?.classList.add('hidden');
+  secondExchangeError?.classList.add('hidden');
+  secondApiResponseCard?.classList.add('hidden');
+  if (btnTestSecondApi) btnTestSecondApi.disabled = true;
+  if (btnRefreshSecond) btnRefreshSecond.disabled = true;
+  if (rawSecondAccess) rawSecondAccess.value = '';
+  if (rawSecondRefresh) rawSecondRefresh.value = '';
+  if (jsonSecondAccess) jsonSecondAccess.textContent = '';
+  if (jsonSecondApiResponse) jsonSecondApiResponse.textContent = '';
+}
+
 function renderUnauthenticated() {
   authView.classList.add('hidden');
   unauthView.classList.remove('hidden');
   if (expiryInterval) clearInterval(expiryInterval);
   verifyStatusPill?.classList.add('hidden');
   verifyDetailsBox?.classList.add('hidden');
+  resetSecondBackendUI();
 }
 
 function renderAuthenticated() {
@@ -385,6 +427,260 @@ btnVerifyId?.addEventListener('click', () => verifyIdTokenWithAlem());
 btnVerifyRawId?.addEventListener('click', () => {
   document.querySelector('.tab-btn[data-tab="tab-id"]')?.click();
   verifyIdTokenWithAlem();
+});
+
+// --- Second Backend Token Exchange Handlers ---
+async function exchangeIdTokenWithSecond() {
+  const token = rawId?.value || currentSession?.idToken || keycloak?.idToken;
+  if (!token) {
+    alert('Нет доступного ID-токена для обмена. Пожалуйста, выполните вход в систему.');
+    return;
+  }
+
+  secondExchangeError?.classList.add('hidden');
+  btnExchangeSecond.disabled = true;
+  btnExchangeSecond.textContent = 'Обмен ID-токена...';
+
+  try {
+    console.log(`[Second Backend] POST ${SECOND_API_BASE}/auth/exchange with id_token`);
+    const resp = await fetch(`${SECOND_API_BASE}/auth/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_token: token.trim() }),
+    });
+
+    const data = await resp.json();
+
+    if (resp.ok && data.access_token) {
+      secondSession = {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        tokenParsed: parseJwt(data.access_token),
+        user: data.user,
+      };
+
+      rawSecondAccess.value = data.access_token;
+      rawSecondRefresh.value = data.refresh_token || '';
+
+      secondMetaIss.textContent = secondSession.tokenParsed?.iss || 'second-backend';
+      secondMetaAud.textContent = Array.isArray(secondSession.tokenParsed?.aud)
+        ? secondSession.tokenParsed.aud.join(', ')
+        : (secondSession.tokenParsed?.aud || 'second-service');
+      secondMetaSub.textContent = data.user?.sub || secondSession.tokenParsed?.sub || '—';
+      secondMetaUser.textContent = data.user?.username || secondSession.tokenParsed?.preferred_username || '—';
+      secondMetaExp.textContent = `${data.expires_in || 900} сек (${Math.round((data.expires_in || 900) / 60)} мин)`;
+      secondMetaRefreshExp.textContent = `${data.refresh_expires_in || 604800} сек (7 дней)`;
+
+      jsonSecondAccess.textContent = JSON.stringify(secondSession.tokenParsed, null, 2);
+
+      secondExchangeBadge.textContent = 'Exchanged & Verified (JWKS)';
+      secondExchangeBadge.className = 'badge badge-success';
+      secondExchangeResult?.classList.remove('hidden');
+
+      if (btnTestSecondApi) btnTestSecondApi.disabled = false;
+      if (btnRefreshSecond) btnRefreshSecond.disabled = false;
+    } else {
+      secondExchangeError.textContent = `Ошибка обмена токена: ${data.message || 'Не удалось обменять токен'}`;
+      secondExchangeError.classList.remove('hidden');
+    }
+  } catch (err) {
+    secondExchangeError.textContent = `Сетевая ошибка при обращении к Second Backend (${SECOND_API_BASE}): ${err.message}. Убедитесь, что сервис запущен на порту 8081.`;
+    secondExchangeError.classList.remove('hidden');
+  } finally {
+    btnExchangeSecond.disabled = false;
+    btnExchangeSecond.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/>
+      </svg>
+      Обменять ID-токен на токены Second (POST /exchange)
+    `;
+  }
+}
+
+async function testSecondProtectedApi() {
+  if (!secondSession?.accessToken) {
+    alert('Сначала выполните обмен токена на Second Backend.');
+    return;
+  }
+
+  btnTestSecondApi.disabled = true;
+  btnTestSecondApi.textContent = 'Запрос к /api/second/me...';
+
+  try {
+    const resp = await fetch(`${SECOND_API_BASE}/second/me`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${secondSession.accessToken}`,
+      },
+    });
+
+    const data = await resp.json();
+    secondApiResponseCard?.classList.remove('hidden');
+    jsonSecondApiResponse.textContent = JSON.stringify(data, null, 2);
+
+    if (resp.ok) {
+      secondApiStatusBadge.textContent = '200 OK (Authorized)';
+      secondApiStatusBadge.className = 'badge badge-success';
+    } else {
+      secondApiStatusBadge.textContent = `${resp.status} Error`;
+      secondApiStatusBadge.className = 'badge badge-danger';
+    }
+  } catch (err) {
+    secondApiResponseCard?.classList.remove('hidden');
+    secondApiStatusBadge.textContent = 'Network Error';
+    secondApiStatusBadge.className = 'badge badge-danger';
+    jsonSecondApiResponse.textContent = JSON.stringify({ error: err.message }, null, 2);
+  } finally {
+    btnTestSecondApi.disabled = false;
+    btnTestSecondApi.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      Проверить защищенный API (GET /api/second/me)
+    `;
+  }
+}
+
+async function refreshSecondToken() {
+  if (!secondSession?.refreshToken) {
+    alert('Нет refresh-токена Second Backend для обновления.');
+    return;
+  }
+
+  btnRefreshSecond.disabled = true;
+  btnRefreshSecond.textContent = 'Обновление...';
+
+  try {
+    const resp = await fetch(`${SECOND_API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: secondSession.refreshToken }),
+    });
+
+    const data = await resp.json();
+
+    if (resp.ok && data.access_token) {
+      secondSession.accessToken = data.access_token;
+      if (data.refresh_token) secondSession.refreshToken = data.refresh_token;
+      secondSession.tokenParsed = parseJwt(data.access_token);
+
+      rawSecondAccess.value = data.access_token;
+      if (data.refresh_token) rawSecondRefresh.value = data.refresh_token;
+      jsonSecondAccess.textContent = JSON.stringify(secondSession.tokenParsed, null, 2);
+
+      alert('Токен Second Backend успешно обновлен через Refresh Token!');
+    } else {
+      alert(`Ошибка обновления: ${data.message || 'Не удалось обновить токен'}`);
+    }
+  } catch (err) {
+    alert(`Сетевая ошибка при обновлении токена Second: ${err.message}`);
+  } finally {
+    btnRefreshSecond.disabled = false;
+    btnRefreshSecond.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+      </svg>
+      Обновить токен через Second (POST /refresh)
+    `;
+  }
+}
+
+async function exchangeAccessTokenWithKeycloak() {
+  const token = rawAccess?.value || currentSession?.accessToken || keycloak?.token;
+  if (!token) {
+    alert('Нет доступного Access Token от Alem. Пожалуйста, выполните вход в систему.');
+    return;
+  }
+
+  secondExchangeError?.classList.add('hidden');
+  btnExchangeAccess.disabled = true;
+  btnExchangeAccess.textContent = 'Keycloak Exchange...';
+
+  try {
+    console.log(`[Second Backend] POST ${SECOND_API_BASE}/auth/exchange-access-token with subject_token`);
+    const resp = await fetch(`${SECOND_API_BASE}/auth/exchange-access-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: token.trim() }),
+    });
+
+    const data = await resp.json();
+
+    if (resp.ok && data.access_token) {
+      secondSession = {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        tokenParsed: parseJwt(data.access_token),
+        user: data.user,
+      };
+
+      rawSecondAccess.value = data.access_token;
+      rawSecondRefresh.value = data.refresh_token || '';
+
+      secondMetaIss.textContent = secondSession.tokenParsed?.iss || 'http://localhost:8180/realms/GovApps';
+      secondMetaAud.textContent = Array.isArray(secondSession.tokenParsed?.aud)
+        ? secondSession.tokenParsed.aud.join(', ')
+        : (secondSession.tokenParsed?.aud || 'second-backend');
+      secondMetaSub.textContent = data.user?.sub || secondSession.tokenParsed?.sub || '—';
+      secondMetaUser.textContent = data.user?.username || secondSession.tokenParsed?.preferred_username || '—';
+      secondMetaExp.textContent = `${data.expires_in || 300} сек (${Math.round((data.expires_in || 300) / 60)} мин)`;
+      secondMetaRefreshExp.textContent = `${data.refresh_expires_in || 1800} сек (${Math.round((data.refresh_expires_in || 1800) / 60)} мин)`;
+
+      jsonSecondAccess.textContent = JSON.stringify(secondSession.tokenParsed, null, 2);
+
+      secondExchangeBadge.textContent = 'Exchanged via Keycloak (RFC 8693)';
+      secondExchangeBadge.className = 'badge badge-success';
+      secondExchangeResult?.classList.remove('hidden');
+
+      if (btnTestSecondApi) btnTestSecondApi.disabled = false;
+      if (btnRefreshSecond) btnRefreshSecond.disabled = false;
+    } else {
+      secondExchangeError.innerHTML = `
+        <strong>Ошибка Keycloak Token Exchange:</strong> ${data.message || 'Запрос отклонен'}
+        <p style="margin-top: 4px; font-size: 11px;">
+          Убедитесь, что клиент <code>second-backend</code> создан в Keycloak, и в клиенте <code>test-app</code> добавлен Mapper типа Audience для <code>second-backend</code>.
+        </p>
+      `;
+      secondExchangeError.classList.remove('hidden');
+    }
+  } catch (err) {
+    secondExchangeError.textContent = `Сетевая ошибка при обращении к Second Backend (${SECOND_API_BASE}): ${err.message}. Убедитесь, что сервис запущен на порту 8081.`;
+    secondExchangeError.classList.remove('hidden');
+  } finally {
+    btnExchangeAccess.disabled = false;
+    btnExchangeAccess.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      </svg>
+      Keycloak Token Exchange (POST /exchange-access-token)
+    `;
+  }
+}
+
+// Event listeners for Second Backend
+btnExchangeSecond?.addEventListener('click', () => exchangeIdTokenWithSecond());
+btnExchangeAccess?.addEventListener('click', () => exchangeAccessTokenWithKeycloak());
+btnTestSecondApi?.addEventListener('click', () => testSecondProtectedApi());
+btnRefreshSecond?.addEventListener('click', () => refreshSecondToken());
+
+btnCopySecondAccess?.addEventListener('click', async () => {
+  if (!rawSecondAccess.value) return;
+  try {
+    await navigator.clipboard.writeText(rawSecondAccess.value);
+    alert('Second Access Token скопирован в буфер обмена!');
+  } catch {
+    alert('Не удалось скопировать токен');
+  }
+});
+
+btnCopySecondRefresh?.addEventListener('click', async () => {
+  if (!rawSecondRefresh.value) return;
+  try {
+    await navigator.clipboard.writeText(rawSecondRefresh.value);
+    alert('Second Refresh Token скопирован в буфер обмена!');
+  } catch {
+    alert('Не удалось скопировать токен');
+  }
 });
 
 // Inspector Tabs

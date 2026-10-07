@@ -322,6 +322,133 @@
             </div>
           </div>
 
+          <!-- Flow 3 / Component: Second Backend Token Exchange -->
+          <div class="card second-backend-card" style="margin-bottom: 24px;">
+            <div class="second-header">
+              <div class="second-header-left">
+                <div class="card-tag card-tag-emerald">Second Backend (:8081)</div>
+                <h2 class="card-title">Second Backend Token Exchange</h2>
+                <p class="card-desc">
+                  Обмен <code>id_token</code> (из Alem/Keycloak) на пару токенов Second Backend (Access + Refresh).
+                  Сервер <code>second</code> проверяет цифровую подпись ID-токена через публичный JWKS Alem (<code>http://localhost:8080/api/auth/jwks</code>).
+                </p>
+              </div>
+              <div class="second-header-right">
+                <div id="second-status-pill" class="second-status-pill status-ready">
+                  <span class="status-dot"></span>
+                  <span id="second-status-text">Second Service (:8081)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="second-actions-row">
+              <button type="button" id="btn-exchange-second" class="btn btn-primary">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/>
+                </svg>
+                Обменять ID-токен (POST /exchange)
+              </button>
+
+              <button type="button" id="btn-exchange-access" class="btn btn-primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                </svg>
+                Keycloak Token Exchange (POST /exchange-access-token)
+              </button>
+
+              <button type="button" id="btn-test-second-api" class="btn btn-outline" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Проверить защищенный API (GET /api/second/me)
+              </button>
+
+              <button type="button" id="btn-refresh-second" class="btn btn-outline" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+                Обновить токен через Second (POST /refresh)
+              </button>
+            </div>
+
+            <!-- Error message container -->
+            <div id="second-exchange-error" class="form-error hidden" style="margin-top: 14px;"></div>
+
+            <!-- Exchange Results Box -->
+            <div id="second-exchange-result" class="second-result-box hidden" style="margin-top: 16px;">
+              <div class="result-header">
+                <div class="result-header-title">
+                  <span class="status-icon">🎉</span>
+                  <span>Second Backend Tokens (Выпущены сервисом :8081)</span>
+                </div>
+                <span id="second-exchange-badge" class="badge badge-success">Exchanged & Verified</span>
+              </div>
+
+              <!-- Second Claims Summary -->
+              <div class="second-meta-grid">
+                <div class="second-meta-item">
+                  <span class="meta-label">Issuer:</span>
+                  <code id="second-meta-iss">second-backend</code>
+                </div>
+                <div class="second-meta-item">
+                  <span class="meta-label">Audience:</span>
+                  <code id="second-meta-aud">second-service</code>
+                </div>
+                <div class="second-meta-item">
+                  <span class="meta-label">Subject (sub):</span>
+                  <code id="second-meta-sub">—</code>
+                </div>
+                <div class="second-meta-item">
+                  <span class="meta-label">Username:</span>
+                  <code id="second-meta-user">—</code>
+                </div>
+                <div class="second-meta-item">
+                  <span class="meta-label">Access Token TTL:</span>
+                  <span id="second-meta-exp" class="badge-accent">15 мин (900с)</span>
+                </div>
+                <div class="second-meta-item">
+                  <span class="meta-label">Refresh Token TTL:</span>
+                  <span id="second-meta-refresh-exp" class="badge-accent">7 дней</span>
+                </div>
+              </div>
+
+              <!-- Raw Tokens -->
+              <div class="second-tokens-grid">
+                <div class="raw-token-block">
+                  <div class="raw-title-row">
+                    <div class="raw-title">Second Access Token (Bearer):</div>
+                    <button type="button" id="btn-copy-second-access" class="btn btn-outline btn-sm">Copy</button>
+                  </div>
+                  <textarea id="raw-second-access" readonly rows="3"></textarea>
+                </div>
+
+                <div class="raw-token-block">
+                  <div class="raw-title-row">
+                    <div class="raw-title">Second Refresh Token:</div>
+                    <button type="button" id="btn-copy-second-refresh" class="btn btn-outline btn-sm">Copy</button>
+                  </div>
+                  <textarea id="raw-second-refresh" readonly rows="3"></textarea>
+                </div>
+              </div>
+
+              <!-- Decoded Second Access Token Inspector -->
+              <div class="second-json-block" style="margin-top: 14px;">
+                <div class="raw-title" style="margin-bottom: 6px;">Расшифрованные клеймы токена Second:</div>
+                <pre><code id="json-second-access" class="json-code"></code></pre>
+              </div>
+
+              <!-- Protected API Call Result Box -->
+              <div id="second-api-response-card" class="second-api-card hidden" style="margin-top: 14px;">
+                <div class="raw-title-row" style="margin-bottom: 6px;">
+                  <div class="raw-title">Ответ защищенного API <code>GET /api/second/me</code>:</div>
+                  <span id="second-api-status-badge" class="badge badge-success">200 OK</span>
+                </div>
+                <pre><code id="json-second-api-response" class="json-code"></code></pre>
+              </div>
+            </div>
+          </div>
+
           <!-- Token Inspector Tabs -->
           <div class="card inspector-card">
             <div class="tab-header">
