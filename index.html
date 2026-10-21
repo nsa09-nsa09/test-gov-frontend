@@ -167,9 +167,29 @@
                       <rect x="14" y="14" width="7" height="7"/>
                       <rect x="3" y="14" width="7" height="7"/>
                     </svg>
-                    Настроить 2FA (Показать QR-код)
+                    Получить прямую ссылку и QR-код (POST /setup-totp-link)
                   </button>
-                  <p class="setup-hint">После подтверждения кода в окне настройки вы сможете сразу войти в систему.</p>
+
+                  <!-- Direct QR Code Container -->
+                  <div id="direct-qr-container" class="qr-container hidden" style="margin-top: 12px; text-align: center; background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #334155;">
+                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: #f8fafc;">QR-код Keycloak для Google Authenticator:</div>
+                    <div style="background: white; display: inline-block; padding: 6px; border-radius: 8px;">
+                      <img id="direct-qr-img" src="" alt="Keycloak TOTP QR Code" style="width: 170px; height: 170px; display: block;" />
+                    </div>
+                    <div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">
+                      Секретный ключ: <code id="direct-secret-key" style="color: #38bdf8; user-select: all; font-size: 12px; font-weight: 600;"></code>
+                    </div>
+                    <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                      <a id="link-direct-qr" href="#" target="_blank" class="btn btn-sm btn-primary" style="font-size: 11px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                        🔗 Открыть прямую ссылку в Keycloak (без пароля)
+                      </a>
+                      <button type="button" id="btn-copy-direct-url" class="btn btn-sm btn-secondary" style="font-size: 11px;">
+                        📋 Скопировать ссылку на QR-код
+                      </button>
+                    </div>
+                  </div>
+
+                  <p class="setup-hint" style="margin-top: 8px;">Отсканируйте QR-код в приложении, введите полученный 6-значный код в поле выше и нажмите Sign in.</p>
                 </div>
 
                 <div id="direct-error" class="form-error hidden"></div>

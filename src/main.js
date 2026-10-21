@@ -97,6 +97,11 @@ const otpUserDisplay = document.getElementById('otp-user-display');
 const directError = document.getElementById('direct-error');
 const directSetupGroup = document.getElementById('direct-setup-group');
 const btnSetup2fa = document.getElementById('btn-setup-2fa');
+const directQrContainer = document.getElementById('direct-qr-container');
+const directQrImg = document.getElementById('direct-qr-img');
+const directSecretKey = document.getElementById('direct-secret-key');
+const linkDirectQr = document.getElementById('link-direct-qr');
+const btnCopyDirectUrl = document.getElementById('btn-copy-direct-url');
 const directResult = document.getElementById('direct-login-result');
 const directJson = document.getElementById('direct-json');
 const resultStatusBadge = document.getElementById('result-status-badge');
@@ -805,34 +810,78 @@ window.addEventListener('message', (event) => {
   }
 });
 
-btnSetup2fa?.addEventListener('click', () => {
-  const url = current2FAState?.setupUrl;
-  if (!url) {
-    alert('Setup URL is not available. Please verify username first.');
+function renderDirectTotpData(data) {
+  if (!data) return;
+
+  if (data.qr_code_base64 && directQrImg) {
+    directQrImg.src = data.qr_code_base64;
+  }
+  if (data.totp_secret && directSecretKey) {
+    directSecretKey.textContent = data.totp_secret;
+  }
+  const targetUrl = data.bridge_url || data.direct_qr_url;
+  if (targetUrl && linkDirectQr) {
+    linkDirectQr.href = targetUrl;
+  }
+
+  directQrContainer?.classList.remove('hidden');
+  totpGroup?.classList.remove('hidden');
+
+  btnCopyDirectUrl?.addEventListener('click', async () => {
+    const rawDirectUrl = data.direct_qr_url || targetUrl;
+    if (!rawDirectUrl) return;
+    try {
+      await navigator.clipboard.writeText(rawDirectUrl);
+      alert('Прямая ссылка на QR-код скопирована в буфер обмена!\n\n' + rawDirectUrl);
+    } catch {
+      prompt('Скопируйте ссылку вручную:', rawDirectUrl);
+    }
+  });
+}
+
+btnSetup2fa?.addEventListener('click', async () => {
+  const username = inputUsername.value.trim();
+  const password = inputPassword.value;
+  if (!username || !password) {
+    alert('Пожалуйста, введите логин и пароль в форме входа.');
+    inputPassword.focus();
     return;
   }
 
-  const width = 560;
-  const height = 720;
-  const left = window.screenX + (window.outerWidth - width) / 2;
-  const top = window.screenY + (window.outerHeight - height) / 2;
+  btnSetup2fa.disabled = true;
+  btnSetup2fa.textContent = 'Генерация прямой ссылки и QR-кода...';
+  directError.classList.add('hidden');
 
-  setupPopup = window.open(
-    url,
-    'kc_2fa_setup',
-    `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no`
-  );
+  try {
+    const res = await fetch(`${ALEM_API_BASE}/setup-totp-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
 
-  const checkTimer = setInterval(() => {
-    if (!setupPopup || setupPopup.closed) {
-      clearInterval(checkTimer);
-      console.log('Setup window closed, checking if 2FA was configured...');
-      const user = inputUsername.value.trim();
-      if (user) {
-        checkUser2FA(user);
-      }
+    const data = await res.json();
+    if (res.ok && data.success) {
+      renderDirectTotpData(data);
+      console.log('[Alem] Direct QR URL received:', data.direct_qr_url);
+    } else {
+      directError.textContent = data.message || 'Не удалось получить ссылку на QR-код';
+      directError.classList.remove('hidden');
     }
-  }, 800);
+  } catch (err) {
+    directError.textContent = `Ошибка связи с Alem: ${err.message}`;
+    directError.classList.remove('hidden');
+  } finally {
+    btnSetup2fa.disabled = false;
+    btnSetup2fa.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7"/>
+        <rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/>
+        <rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      Получить прямую ссылку и QR-код (POST /setup-totp-link)
+    `;
+  }
 });
 
 // --- Alem Gateway: Direct Login Submit ---
@@ -852,30 +901,34 @@ directForm.addEventListener('submit', async (e) => {
     btnDirectSubmit.textContent = 'Sign in via Alem (POST /login)';
   }
 
-  if (current2FAState.needsSetup) {
-    directError.innerHTML = `
-      <strong>First-time 2FA Setup Required:</strong>
-      <p style="margin-top: 4px;">Для вашего аккаунта включена обязательная 2FA. Нажмите <b>"Настроить 2FA (Показать QR-код)"</b> выше, отсканируйте QR-код и подтвердите первый 6-значный код.</p>
-    `;
-    directError.classList.remove('hidden');
-    btnSetup2fa?.focus();
-    return;
-  }
-
   const payload = {
     username,
     password,
   };
 
-  if (current2FAState.has2fa) {
-    const totp = inputTotp.value.trim().replace(/\D/g, '');
-    if (totp.length !== 6) {
+  const totpVal = inputTotp.value.trim().replace(/\D/g, '');
+
+  if (current2FAState.needsSetup) {
+    if (totpVal.length !== 6) {
+      // Автоматически запрашиваем прямую ссылку и QR-код
+      btnSetup2fa?.click();
+      directError.innerHTML = `
+        <strong>First-time 2FA Setup Required:</strong>
+        <p style="margin-top: 4px;">Сгенерирован QR-код и прямая ссылка. Отсканируйте QR-код в Google Authenticator, введите 6-значный код в поле выше и нажмите Sign in.</p>
+      `;
+      directError.classList.remove('hidden');
+      inputTotp.focus();
+      return;
+    }
+    payload.otp = totpVal;
+  } else if (current2FAState.has2fa) {
+    if (totpVal.length !== 6) {
       directError.textContent = 'Please enter the 6-digit code from Google Authenticator';
       directError.classList.remove('hidden');
       inputTotp.focus();
       return;
     }
-    payload.otp = totp;
+    payload.otp = totpVal;
   }
 
   btnDirectSubmit.disabled = true;
@@ -911,6 +964,19 @@ directForm.addEventListener('submit', async (e) => {
       renderAuthenticated();
     } else {
       console.warn('[Alem Gateway] Login failed:', data);
+
+      // Если в ответе вернулись данные для настройки 2FA (QR-код и прямая ссылка)
+      if (data.data && data.data.qr_code_base64) {
+        renderDirectTotpData(data.data);
+        directError.innerHTML = `
+          <strong>${data.message || 'Требуется настройка 2FA'}</strong>
+          <p style="margin-top: 4px; font-size: 11px;">Сгенерирован QR-код и прямая ссылка. Отсканируйте QR-код в Google Authenticator, введите 6-значный код в поле выше и нажмите Sign in снова.</p>
+        `;
+        directError.classList.remove('hidden');
+        inputTotp.focus();
+        return;
+      }
+
       const errorMsg = data.message || 'Invalid username or password';
       const isGenericCredError = errorMsg.includes('Неверный') || errorMsg.toLowerCase().includes('credential') || errorMsg.toLowerCase().includes('password');
       if (current2FAState.has2fa && isGenericCredError) {
