@@ -102,6 +102,9 @@ const directQrImg = document.getElementById('direct-qr-img');
 const directSecretKey = document.getElementById('direct-secret-key');
 const linkDirectQr = document.getElementById('link-direct-qr');
 const btnCopyDirectUrl = document.getElementById('btn-copy-direct-url');
+const directConfirmCode = document.getElementById('direct-confirm-code');
+const btnConfirmTotp = document.getElementById('btn-confirm-totp');
+const directConfirmMsg = document.getElementById('direct-confirm-msg');
 const directResult = document.getElementById('direct-login-result');
 const directJson = document.getElementById('direct-json');
 const resultStatusBadge = document.getElementById('result-status-badge');
@@ -122,6 +125,7 @@ let expiryInterval = null;
 let currentSession = null; // { type: 'keycloak' | 'alem', accessToken, refreshToken, idToken, tokenParsed }
 let current2FAState = { checked: false, has2fa: false, username: '' };
 let checkDebounceTimer = null;
+let activeTotpSetupId = null;
 
 // Parse JWT without external libraries
 function parseJwt(token) {
@@ -813,6 +817,8 @@ window.addEventListener('message', (event) => {
 function renderDirectTotpData(data) {
   if (!data) return;
 
+  activeTotpSetupId = data.setup_id || null;
+
   if (data.qr_code_base64 && directQrImg) {
     directQrImg.src = data.qr_code_base64;
   }
@@ -826,6 +832,15 @@ function renderDirectTotpData(data) {
 
   directQrContainer?.classList.remove('hidden');
   totpGroup?.classList.remove('hidden');
+
+  if (directConfirmMsg) {
+    directConfirmMsg.className = 'hidden';
+    directConfirmMsg.textContent = '';
+  }
+  if (directConfirmCode) {
+    directConfirmCode.value = '';
+    directConfirmCode.focus();
+  }
 
   btnCopyDirectUrl?.addEventListener('click', async () => {
     const rawDirectUrl = data.direct_qr_url || targetUrl;
@@ -849,11 +864,11 @@ btnSetup2fa?.addEventListener('click', async () => {
   }
 
   btnSetup2fa.disabled = true;
-  btnSetup2fa.textContent = 'Генерация прямой ссылки и QR-кода...';
+  btnSetup2fa.textContent = 'Генерация QR-кода через Keycloak SPI...';
   directError.classList.add('hidden');
 
   try {
-    const res = await fetch(`${ALEM_API_BASE}/setup-totp-link`, {
+    const res = await fetch(`${ALEM_API_BASE}/2fa/totp/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -862,9 +877,9 @@ btnSetup2fa?.addEventListener('click', async () => {
     const data = await res.json();
     if (res.ok && data.success) {
       renderDirectTotpData(data);
-      console.log('[Alem] Direct QR URL received:', data.direct_qr_url);
+      console.log('[Alem] Direct Keycloak SPI QR code received. Setup ID:', data.setup_id);
     } else {
-      directError.textContent = data.message || 'Не удалось получить ссылку на QR-код';
+      directError.textContent = data.message || 'Не удалось получить QR-код через Keycloak SPI';
       directError.classList.remove('hidden');
     }
   } catch (err) {
@@ -879,8 +894,81 @@ btnSetup2fa?.addEventListener('click', async () => {
         <rect x="14" y="14" width="7" height="7"/>
         <rect x="3" y="14" width="7" height="7"/>
       </svg>
-      Получить прямую ссылку и QR-код (POST /setup-totp-link)
+      Получить QR-код напрямую (Native Keycloak TOTP API)
     `;
+  }
+});
+
+btnConfirmTotp?.addEventListener('click', async () => {
+  const username = inputUsername.value.trim();
+  const code = (directConfirmCode?.value?.trim().replace(/\D/g, '')) || (inputTotp?.value?.trim().replace(/\D/g, ''));
+  if (!code || code.length !== 6) {
+    if (directConfirmMsg) {
+      directConfirmMsg.className = '';
+      directConfirmMsg.style.background = '#7f1d1d';
+      directConfirmMsg.style.color = '#fecaca';
+      directConfirmMsg.textContent = 'Пожалуйста, введите 6 цифр из приложения Authenticator.';
+      directConfirmMsg.classList.remove('hidden');
+    }
+    directConfirmCode?.focus();
+    return;
+  }
+
+  btnConfirmTotp.disabled = true;
+  btnConfirmTotp.textContent = 'Проверка...';
+
+  try {
+    const res = await fetch(`${ALEM_API_BASE}/2fa/totp/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        setup_id: activeTotpSetupId,
+        username,
+        code,
+        device_name: 'Google Authenticator'
+      }),
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (directConfirmMsg) {
+        directConfirmMsg.className = '';
+        directConfirmMsg.style.background = '#064e3b';
+        directConfirmMsg.style.color = '#a7f3d0';
+        directConfirmMsg.textContent = '✅ 2FA успешно активирована в Keycloak! Теперь вы можете войти.';
+        directConfirmMsg.classList.remove('hidden');
+      }
+      if (inputTotp) {
+        inputTotp.value = code;
+      }
+      await checkUser2FA(username);
+    } else {
+      if (directConfirmMsg) {
+        directConfirmMsg.className = '';
+        directConfirmMsg.style.background = '#7f1d1d';
+        directConfirmMsg.style.color = '#fecaca';
+        directConfirmMsg.textContent = '❌ ' + (data.message || 'Неверный код подтверждения');
+        directConfirmMsg.classList.remove('hidden');
+      }
+    }
+  } catch (err) {
+    if (directConfirmMsg) {
+      directConfirmMsg.className = '';
+      directConfirmMsg.style.background = '#7f1d1d';
+      directConfirmMsg.style.color = '#fecaca';
+      directConfirmMsg.textContent = '❌ Ошибка сети: ' + err.message;
+      directConfirmMsg.classList.remove('hidden');
+    }
+  } finally {
+    btnConfirmTotp.disabled = false;
+    btnConfirmTotp.textContent = 'Активировать 2FA';
+  }
+});
+
+directConfirmCode?.addEventListener('keyup', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    btnConfirmTotp?.click();
   }
 });
 
@@ -906,19 +994,45 @@ directForm.addEventListener('submit', async (e) => {
     password,
   };
 
-  const totpVal = inputTotp.value.trim().replace(/\D/g, '');
+  const totpVal = (inputTotp.value.trim().replace(/\D/g, '')) || (directConfirmCode?.value?.trim().replace(/\D/g, ''));
 
   if (current2FAState.needsSetup) {
     if (totpVal.length !== 6) {
-      // Автоматически запрашиваем прямую ссылку и QR-код
       btnSetup2fa?.click();
       directError.innerHTML = `
         <strong>First-time 2FA Setup Required:</strong>
-        <p style="margin-top: 4px;">Сгенерирован QR-код и прямая ссылка. Отсканируйте QR-код в Google Authenticator, введите 6-значный код в поле выше и нажмите Sign in.</p>
+        <p style="margin-top: 4px;">Сгенерирован QR-код. Отсканируйте его в приложении, введите 6-значный код и нажмите "Активировать 2FA" или Sign in.</p>
       `;
       directError.classList.remove('hidden');
-      inputTotp.focus();
+      (directConfirmCode || inputTotp).focus();
       return;
+    }
+
+    if (activeTotpSetupId) {
+      try {
+        btnDirectSubmit.disabled = true;
+        btnDirectSubmit.textContent = 'Activating 2FA in Keycloak...';
+        const confirmRes = await fetch(`${ALEM_API_BASE}/2fa/totp/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            setup_id: activeTotpSetupId,
+            username,
+            code: totpVal,
+            device_name: 'Google Authenticator'
+          }),
+        });
+        const confirmData = await confirmRes.json();
+        if (!confirmRes.ok || !confirmData.success) {
+          directError.textContent = 'Ошибка активации 2FA: ' + (confirmData.message || 'Неверный код');
+          directError.classList.remove('hidden');
+          btnDirectSubmit.disabled = false;
+          btnDirectSubmit.textContent = 'Sign in via Alem (POST /login)';
+          return;
+        }
+      } catch (err) {
+        console.warn('Auto-confirm failed:', err);
+      }
     }
     payload.otp = totpVal;
   } else if (current2FAState.has2fa) {

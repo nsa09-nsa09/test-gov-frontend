@@ -167,7 +167,7 @@
                       <rect x="14" y="14" width="7" height="7"/>
                       <rect x="3" y="14" width="7" height="7"/>
                     </svg>
-                    Получить прямую ссылку и QR-код (POST /setup-totp-link)
+                    Получить QR-код напрямую (Native Keycloak TOTP API)
                   </button>
 
                   <!-- Direct QR Code Container -->
@@ -179,7 +179,20 @@
                     <div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">
                       Секретный ключ: <code id="direct-secret-key" style="color: #38bdf8; user-select: all; font-size: 12px; font-weight: 600;"></code>
                     </div>
-                    <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+
+                    <!-- Confirm 2FA Code Block -->
+                    <div id="totp-confirm-block" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #334155; text-align: left;">
+                      <label for="direct-confirm-code" style="font-size: 11px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Код из Google Authenticator (6 цифр):</label>
+                      <div style="display: flex; gap: 8px;">
+                        <input type="text" id="direct-confirm-code" maxlength="6" pattern="[0-9]*" inputmode="numeric" placeholder="123456" class="otp-input" style="flex: 1; padding: 6px 10px; font-size: 14px; text-align: center; letter-spacing: 2px;" />
+                        <button type="button" id="btn-confirm-totp" class="btn btn-success" style="font-size: 11px; white-space: nowrap; padding: 6px 12px; background: #16a34a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                          Активировать 2FA
+                        </button>
+                      </div>
+                      <div id="direct-confirm-msg" class="hidden" style="margin-top: 8px; font-size: 11px; padding: 6px 10px; border-radius: 4px;"></div>
+                    </div>
+
+                    <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
                       <a id="link-direct-qr" href="#" target="_blank" class="btn btn-sm btn-primary" style="font-size: 11px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
                         🔗 Открыть прямую ссылку в Keycloak (без пароля)
                       </a>
@@ -189,7 +202,7 @@
                     </div>
                   </div>
 
-                  <p class="setup-hint" style="margin-top: 8px;">Отсканируйте QR-код в приложении, введите полученный 6-значный код в поле выше и нажмите Sign in.</p>
+                  <p class="setup-hint" style="margin-top: 8px;">Отсканируйте QR-код в приложении, введите полученный 6-значный код и нажмите "Активировать 2FA", затем войдите в систему.</p>
                 </div>
 
                 <div id="direct-error" class="form-error hidden"></div>
