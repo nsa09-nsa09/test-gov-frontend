@@ -1138,3 +1138,75 @@ body {
 }
 
 
+
+/* RFC 8693 Token Exchange card */
+.badge-danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.tx-card .second-actions-row + .second-actions-row {
+  margin-top: 10px;
+}
+
+.tx-links a {
+  color: #60a5fa;
+}
+
+.tx-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tx-hint {
+  margin-top: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+}
+
+.tx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tx-table th,
+.tx-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--card-border);
+  vertical-align: top;
+}
+
+.tx-table th {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tx-table td code {
+  font-family: var(--font-mono);
+  color: #93c5fd;
+  word-break: break-all;
+}
+
+.tx-table tr.tx-changed td code {
+  color: #34d399;
+  font-weight: 600;
+}

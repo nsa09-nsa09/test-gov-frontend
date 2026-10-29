@@ -188,6 +188,7 @@ function resetSecondBackendUI() {
   if (rawSecondRefresh) rawSecondRefresh.value = '';
   if (jsonSecondAccess) jsonSecondAccess.textContent = '';
   if (jsonSecondApiResponse) jsonSecondApiResponse.textContent = '';
+  resetTokenExchangeUI();
 }
 
 function renderUnauthenticated() {
@@ -1170,6 +1171,205 @@ registerForm.addEventListener('submit', async (e) => {
   } finally {
     btnRegisterSubmit.disabled = false;
     btnRegisterSubmit.textContent = 'Register in Keycloak (POST /register)';
+  }
+});
+
+// ---------------------------------------------------------------------------
+// RFC 8693 Token Exchange: alem access token → second-backend token через Keycloak
+// ---------------------------------------------------------------------------
+const btnTxExchange = document.getElementById('btn-tx-exchange');
+const txRequestRefresh = document.getElementById('tx-request-refresh');
+const btnTxMeAlem = document.getElementById('btn-tx-me-alem');
+const btnTxMeSecond = document.getElementById('btn-tx-me-second');
+const btnTxInfoAlem = document.getElementById('btn-tx-info-alem');
+const btnTxInfoSecond = document.getElementById('btn-tx-info-second');
+const btnTxIntrospectAlem = document.getElementById('btn-tx-introspect-alem');
+const btnTxIntrospectSecond = document.getElementById('btn-tx-introspect-second');
+const btnTxRefresh = document.getElementById('btn-tx-refresh');
+const btnTxCopy = document.getElementById('btn-tx-copy');
+const txError = document.getElementById('tx-error');
+const txHint = document.getElementById('tx-hint');
+const txResult = document.getElementById('tx-result');
+const txCompareBody = document.getElementById('tx-compare-body');
+const txRawSecond = document.getElementById('tx-raw-second');
+const txOutputCard = document.getElementById('tx-output-card');
+const txOutputTitle = document.getElementById('tx-output-title');
+const txOutputBadge = document.getElementById('tx-output-badge');
+const txOutput = document.getElementById('tx-output');
+
+const TX_COMPARE_CLAIMS = ['iss', 'azp', 'aud', 'sub', 'preferred_username', 'scope', 'typ', 'jti', 'exp'];
+
+let txSession = null; // { accessToken, refreshToken }
+
+function getAlemAccessToken() {
+  return (rawAccess?.value || currentSession?.accessToken || keycloak?.token || '').trim();
+}
+
+function resetTokenExchangeUI() {
+  txSession = null;
+  txError?.classList.add('hidden');
+  txHint?.classList.add('hidden');
+  txResult?.classList.add('hidden');
+  txOutputCard?.classList.add('hidden');
+  if (txRawSecond) txRawSecond.value = '';
+  updateTxButtons();
+}
+
+function updateTxButtons() {
+  const hasSecond = Boolean(txSession?.accessToken);
+  if (btnTxMeSecond) btnTxMeSecond.disabled = !hasSecond;
+  if (btnTxInfoSecond) btnTxInfoSecond.disabled = !hasSecond;
+  if (btnTxIntrospectSecond) btnTxIntrospectSecond.disabled = !hasSecond;
+  if (btnTxRefresh) btnTxRefresh.disabled = !txSession?.refreshToken;
+}
+
+function formatClaim(name, value) {
+  if (value === undefined || value === null) return '—';
+  if (name === 'exp' && typeof value === 'number') return new Date(value * 1000).toISOString();
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+}
+
+function renderTxCompare(subjectToken, issuedToken) {
+  const subject = parseJwt(subjectToken);
+  const issued = parseJwt(issuedToken);
+  txCompareBody.replaceChildren();
+
+  for (const claim of TX_COMPARE_CLAIMS) {
+    const before = formatClaim(claim, subject[claim]);
+    const after = formatClaim(claim, issued[claim]);
+    const row = document.createElement('tr');
+    if (before !== after) row.className = 'tx-changed';
+
+    for (const text of [claim, before, after]) {
+      const cell = document.createElement('td');
+      const code = document.createElement('code');
+      code.textContent = text;
+      cell.appendChild(code);
+      row.appendChild(cell);
+    }
+    txCompareBody.appendChild(row);
+  }
+}
+
+function showTxOutput(title, status, body) {
+  txOutputTitle.textContent = title;
+  txOutputBadge.textContent = status === 0 ? 'Network Error' : `${status}`;
+  txOutputBadge.className = `badge ${status >= 200 && status < 300 ? 'badge-success' : 'badge-danger'}`;
+  txOutput.textContent = typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+  txOutputCard.classList.remove('hidden');
+}
+
+function showTxError(message) {
+  txError.textContent = message;
+  txError.classList.remove('hidden');
+}
+
+async function txRequest(title, path, options) {
+  txError.classList.add('hidden');
+  try {
+    console.log(`[Token Exchange] ${options.method || 'GET'} ${SECOND_API_BASE}${path}`);
+    const resp = await fetch(`${SECOND_API_BASE}${path}`, options);
+    const data = await resp.json().catch(() => ({}));
+    showTxOutput(title, resp.status, data);
+    return { ok: resp.ok, data };
+  } catch (err) {
+    showTxOutput(title, 0, err.message);
+    showTxError(`Сетевая ошибка при обращении к Second Backend (${SECOND_API_BASE}): ${err.message}. Убедитесь, что сервис запущен на порту 8081.`);
+    return { ok: false, data: null };
+  }
+}
+
+function postJson(body) {
+  return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+}
+
+function bearer(token) {
+  return { method: 'GET', headers: { Authorization: `Bearer ${token}` } };
+}
+
+function requireAlemToken() {
+  const token = getAlemAccessToken();
+  if (!token) showTxError('Нет access token от alem. Выполните вход в систему.');
+  return token;
+}
+
+function applyTxTokens(data, subjectToken) {
+  txSession = { accessToken: data.access_token, refreshToken: data.refresh_token || null };
+  txRawSecond.value = data.access_token;
+  renderTxCompare(subjectToken, data.access_token);
+  txResult.classList.remove('hidden');
+
+  if (data.hint) {
+    txHint.textContent = data.hint;
+    txHint.classList.remove('hidden');
+  } else {
+    txHint.classList.add('hidden');
+  }
+  updateTxButtons();
+}
+
+async function txExchange() {
+  const subjectToken = requireAlemToken();
+  if (!subjectToken) return;
+
+  const body = { subject_token: subjectToken };
+  if (txRequestRefresh?.checked) body.requested_token_type = 'refresh_token';
+
+  btnTxExchange.disabled = true;
+  const { ok, data } = await txRequest('POST /api/auth/token-exchange', '/auth/token-exchange', postJson(body));
+  btnTxExchange.disabled = false;
+
+  if (ok && data?.access_token) {
+    applyTxTokens(data, subjectToken);
+  } else if (data) {
+    showTxError(`Token Exchange отклонён: ${data.message || 'неизвестная ошибка'}`);
+  }
+}
+
+async function txRefresh() {
+  if (!txSession?.refreshToken) return;
+  const previous = txSession.accessToken;
+  const { ok, data } = await txRequest('POST /api/auth/token-exchange/refresh', '/auth/token-exchange/refresh',
+    postJson({ refresh_token: txSession.refreshToken }));
+  if (ok && data?.access_token) {
+    applyTxTokens(data, previous);
+  }
+}
+
+btnTxExchange?.addEventListener('click', () => txExchange());
+btnTxRefresh?.addEventListener('click', () => txRefresh());
+
+btnTxMeAlem?.addEventListener('click', () => {
+  const token = requireAlemToken();
+  if (token) txRequest('GET /api/second/me (токен alem)', '/second/me', bearer(token));
+});
+btnTxMeSecond?.addEventListener('click', () => {
+  if (txSession) txRequest('GET /api/second/me (токен second)', '/second/me', bearer(txSession.accessToken));
+});
+btnTxInfoAlem?.addEventListener('click', () => {
+  const token = requireAlemToken();
+  if (token) txRequest('GET /api/second/token-info (токен alem)', '/second/token-info', bearer(token));
+});
+btnTxInfoSecond?.addEventListener('click', () => {
+  if (txSession) txRequest('GET /api/second/token-info (токен second)', '/second/token-info', bearer(txSession.accessToken));
+});
+btnTxIntrospectAlem?.addEventListener('click', () => {
+  const token = requireAlemToken();
+  if (token) txRequest('POST /api/auth/token-exchange/introspect (токен alem)', '/auth/token-exchange/introspect', postJson({ token }));
+});
+btnTxIntrospectSecond?.addEventListener('click', () => {
+  if (txSession) txRequest('POST /api/auth/token-exchange/introspect (токен second)', '/auth/token-exchange/introspect',
+    postJson({ token: txSession.accessToken }));
+});
+btnTxCopy?.addEventListener('click', async () => {
+  if (!txRawSecond.value) return;
+  try {
+    await navigator.clipboard.writeText(txRawSecond.value);
+    btnTxCopy.textContent = 'Copied';
+    setTimeout(() => { btnTxCopy.textContent = 'Copy'; }, 1500);
+  } catch (err) {
+    console.warn('Clipboard error:', err);
   }
 });
 

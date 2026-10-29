@@ -482,6 +482,76 @@
             </div>
           </div>
 
+          <!-- Flow 4: RFC 8693 Token Exchange alem → second через Keycloak -->
+          <div class="card second-backend-card tx-card" style="margin-bottom: 24px;">
+            <div class="second-header">
+              <div class="second-header-left">
+                <div class="card-tag card-tag-emerald">RFC 8693 · Second Backend (:8081)</div>
+                <h2 class="card-title">Token Exchange: alem → second через Keycloak</h2>
+                <p class="card-desc">
+                  Access token от alem (<code>azp=test-app</code>) отправляется в <code>POST /api/auth/token-exchange</code>.
+                  Second backend обменивает его в Keycloak на собственный токен (<code>azp=second-backend</code>).
+                  Защищённый <code>GET /api/second/me</code> принимает только обменянный токен.
+                </p>
+                <p class="card-desc tx-links">
+                  Swagger:
+                  <a href="http://localhost:8080/swagger-ui.html" target="_blank" rel="noopener">alem (:8080)</a> ·
+                  <a href="http://localhost:8081/swagger-ui.html" target="_blank" rel="noopener">second (:8081)</a>
+                </p>
+              </div>
+            </div>
+
+            <div class="second-actions-row">
+              <button type="button" id="btn-tx-exchange" class="btn btn-primary">1. Token Exchange (POST /token-exchange)</button>
+              <label class="tx-checkbox">
+                <input type="checkbox" id="tx-request-refresh" />
+                запросить refresh_token
+              </label>
+            </div>
+
+            <div class="second-actions-row">
+              <button type="button" id="btn-tx-me-alem" class="btn btn-outline">2a. /me с токеном alem (ждём 401)</button>
+              <button type="button" id="btn-tx-me-second" class="btn btn-outline" disabled>2b. /me с токеном second (ждём 200)</button>
+              <button type="button" id="btn-tx-info-alem" class="btn btn-outline">token-info: alem</button>
+              <button type="button" id="btn-tx-info-second" class="btn btn-outline" disabled>token-info: second</button>
+            </div>
+
+            <div class="second-actions-row">
+              <button type="button" id="btn-tx-introspect-alem" class="btn btn-outline">Introspect: alem</button>
+              <button type="button" id="btn-tx-introspect-second" class="btn btn-outline" disabled>Introspect: second</button>
+              <button type="button" id="btn-tx-refresh" class="btn btn-outline" disabled>Refresh second (POST /token-exchange/refresh)</button>
+            </div>
+
+            <div id="tx-error" class="form-error hidden" style="margin-top: 14px;"></div>
+            <div id="tx-hint" class="tx-hint hidden"></div>
+
+            <div id="tx-result" class="second-result-box hidden" style="margin-top: 16px;">
+              <div class="raw-title" style="margin-bottom: 8px;">Claims до и после обмена:</div>
+              <table class="tx-table">
+                <thead>
+                  <tr><th>Claim</th><th>Токен alem (subject)</th><th>Токен second (issued)</th></tr>
+                </thead>
+                <tbody id="tx-compare-body"></tbody>
+              </table>
+
+              <div class="raw-token-block" style="margin-top: 14px;">
+                <div class="raw-title-row">
+                  <div class="raw-title">Second Access Token (azp=second-backend):</div>
+                  <button type="button" id="btn-tx-copy" class="btn btn-outline btn-sm">Copy</button>
+                </div>
+                <textarea id="tx-raw-second" readonly rows="3"></textarea>
+              </div>
+            </div>
+
+            <div id="tx-output-card" class="second-api-card hidden" style="margin-top: 14px;">
+              <div class="raw-title-row" style="margin-bottom: 6px;">
+                <div class="raw-title" id="tx-output-title">Ответ</div>
+                <span id="tx-output-badge" class="badge badge-success">200 OK</span>
+              </div>
+              <pre><code id="tx-output" class="json-code"></code></pre>
+            </div>
+          </div>
+
           <!-- Token Inspector Tabs -->
           <div class="card inspector-card">
             <div class="tab-header">
