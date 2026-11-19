@@ -24,33 +24,6 @@ const btnRefresh = document.getElementById('btn-refresh');
 const btnCopyToken = document.getElementById('btn-copy-token');
 const btnJwtIo = document.getElementById('btn-jwt-io');
 
-// DOM Elements: Second Backend Integration
-const btnExchangeSecond = document.getElementById('btn-exchange-second');
-const btnExchangeAccess = document.getElementById('btn-exchange-access');
-const btnTestSecondApi = document.getElementById('btn-test-second-api');
-const btnRefreshSecond = document.getElementById('btn-refresh-second');
-const secondStatusPill = document.getElementById('second-status-pill');
-const secondStatusText = document.getElementById('second-status-text');
-const secondExchangeError = document.getElementById('second-exchange-error');
-const secondExchangeResult = document.getElementById('second-exchange-result');
-const secondExchangeBadge = document.getElementById('second-exchange-badge');
-const secondMetaIss = document.getElementById('second-meta-iss');
-const secondMetaAud = document.getElementById('second-meta-aud');
-const secondMetaSub = document.getElementById('second-meta-sub');
-const secondMetaUser = document.getElementById('second-meta-user');
-const secondMetaExp = document.getElementById('second-meta-exp');
-const secondMetaRefreshExp = document.getElementById('second-meta-refresh-exp');
-const rawSecondAccess = document.getElementById('raw-second-access');
-const rawSecondRefresh = document.getElementById('raw-second-refresh');
-const btnCopySecondAccess = document.getElementById('btn-copy-second-access');
-const btnCopySecondRefresh = document.getElementById('btn-copy-second-refresh');
-const jsonSecondAccess = document.getElementById('json-second-access');
-const secondApiResponseCard = document.getElementById('second-api-response-card');
-const secondApiStatusBadge = document.getElementById('second-api-status-badge');
-const jsonSecondApiResponse = document.getElementById('json-second-api-response');
-
-let secondSession = null;
-
 const userName = document.getElementById('user-name');
 const userUsername = document.getElementById('user-username');
 const userEmail = document.getElementById('user-email');
@@ -177,29 +150,17 @@ async function init() {
   }
 }
 
-function resetSecondBackendUI() {
-  secondSession = null;
-  secondExchangeResult?.classList.add('hidden');
-  secondExchangeError?.classList.add('hidden');
-  secondApiResponseCard?.classList.add('hidden');
-  if (btnTestSecondApi) btnTestSecondApi.disabled = true;
-  if (btnRefreshSecond) btnRefreshSecond.disabled = true;
-  if (rawSecondAccess) rawSecondAccess.value = '';
-  if (rawSecondRefresh) rawSecondRefresh.value = '';
-  if (jsonSecondAccess) jsonSecondAccess.textContent = '';
-  if (jsonSecondApiResponse) jsonSecondApiResponse.textContent = '';
-}
-
 function renderUnauthenticated() {
   authView.classList.add('hidden');
   unauthView.classList.remove('hidden');
   if (expiryInterval) clearInterval(expiryInterval);
   verifyStatusPill?.classList.add('hidden');
   verifyDetailsBox?.classList.add('hidden');
-  resetSecondBackendUI();
+  resetTokenExchangeUI();
 }
 
 function renderAuthenticated() {
+  resetTokenExchangeUI();
   unauthView.classList.add('hidden');
   authView.classList.remove('hidden');
   verifyStatusPill?.classList.add('hidden');
@@ -436,260 +397,6 @@ btnVerifyId?.addEventListener('click', () => verifyIdTokenWithAlem());
 btnVerifyRawId?.addEventListener('click', () => {
   document.querySelector('.tab-btn[data-tab="tab-id"]')?.click();
   verifyIdTokenWithAlem();
-});
-
-// --- Second Backend Token Exchange Handlers ---
-async function exchangeIdTokenWithSecond() {
-  const token = rawId?.value || currentSession?.idToken || keycloak?.idToken;
-  if (!token) {
-    alert('Нет доступного ID-токена для обмена. Пожалуйста, выполните вход в систему.');
-    return;
-  }
-
-  secondExchangeError?.classList.add('hidden');
-  btnExchangeSecond.disabled = true;
-  btnExchangeSecond.textContent = 'Обмен ID-токена...';
-
-  try {
-    console.log(`[Second Backend] POST ${SECOND_API_BASE}/auth/exchange with id_token`);
-    const resp = await fetch(`${SECOND_API_BASE}/auth/exchange`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id_token: token.trim() }),
-    });
-
-    const data = await resp.json();
-
-    if (resp.ok && data.access_token) {
-      secondSession = {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        tokenParsed: parseJwt(data.access_token),
-        user: data.user,
-      };
-
-      rawSecondAccess.value = data.access_token;
-      rawSecondRefresh.value = data.refresh_token || '';
-
-      secondMetaIss.textContent = secondSession.tokenParsed?.iss || 'second-backend';
-      secondMetaAud.textContent = Array.isArray(secondSession.tokenParsed?.aud)
-        ? secondSession.tokenParsed.aud.join(', ')
-        : (secondSession.tokenParsed?.aud || 'second-service');
-      secondMetaSub.textContent = data.user?.sub || secondSession.tokenParsed?.sub || '—';
-      secondMetaUser.textContent = data.user?.username || secondSession.tokenParsed?.preferred_username || '—';
-      secondMetaExp.textContent = `${data.expires_in || 900} сек (${Math.round((data.expires_in || 900) / 60)} мин)`;
-      secondMetaRefreshExp.textContent = `${data.refresh_expires_in || 604800} сек (7 дней)`;
-
-      jsonSecondAccess.textContent = JSON.stringify(secondSession.tokenParsed, null, 2);
-
-      secondExchangeBadge.textContent = 'Exchanged & Verified (JWKS)';
-      secondExchangeBadge.className = 'badge badge-success';
-      secondExchangeResult?.classList.remove('hidden');
-
-      if (btnTestSecondApi) btnTestSecondApi.disabled = false;
-      if (btnRefreshSecond) btnRefreshSecond.disabled = false;
-    } else {
-      secondExchangeError.textContent = `Ошибка обмена токена: ${data.message || 'Не удалось обменять токен'}`;
-      secondExchangeError.classList.remove('hidden');
-    }
-  } catch (err) {
-    secondExchangeError.textContent = `Сетевая ошибка при обращении к Second Backend (${SECOND_API_BASE}): ${err.message}. Убедитесь, что сервис запущен на порту 8081.`;
-    secondExchangeError.classList.remove('hidden');
-  } finally {
-    btnExchangeSecond.disabled = false;
-    btnExchangeSecond.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/>
-      </svg>
-      Обменять ID-токен на токены Second (POST /exchange)
-    `;
-  }
-}
-
-async function testSecondProtectedApi() {
-  if (!secondSession?.accessToken) {
-    alert('Сначала выполните обмен токена на Second Backend.');
-    return;
-  }
-
-  btnTestSecondApi.disabled = true;
-  btnTestSecondApi.textContent = 'Запрос к /api/second/me...';
-
-  try {
-    const resp = await fetch(`${SECOND_API_BASE}/second/me`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${secondSession.accessToken}`,
-      },
-    });
-
-    const data = await resp.json();
-    secondApiResponseCard?.classList.remove('hidden');
-    jsonSecondApiResponse.textContent = JSON.stringify(data, null, 2);
-
-    if (resp.ok) {
-      secondApiStatusBadge.textContent = '200 OK (Authorized)';
-      secondApiStatusBadge.className = 'badge badge-success';
-    } else {
-      secondApiStatusBadge.textContent = `${resp.status} Error`;
-      secondApiStatusBadge.className = 'badge badge-danger';
-    }
-  } catch (err) {
-    secondApiResponseCard?.classList.remove('hidden');
-    secondApiStatusBadge.textContent = 'Network Error';
-    secondApiStatusBadge.className = 'badge badge-danger';
-    jsonSecondApiResponse.textContent = JSON.stringify({ error: err.message }, null, 2);
-  } finally {
-    btnTestSecondApi.disabled = false;
-    btnTestSecondApi.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      </svg>
-      Проверить защищенный API (GET /api/second/me)
-    `;
-  }
-}
-
-async function refreshSecondToken() {
-  if (!secondSession?.refreshToken) {
-    alert('Нет refresh-токена Second Backend для обновления.');
-    return;
-  }
-
-  btnRefreshSecond.disabled = true;
-  btnRefreshSecond.textContent = 'Обновление...';
-
-  try {
-    const resp = await fetch(`${SECOND_API_BASE}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: secondSession.refreshToken }),
-    });
-
-    const data = await resp.json();
-
-    if (resp.ok && data.access_token) {
-      secondSession.accessToken = data.access_token;
-      if (data.refresh_token) secondSession.refreshToken = data.refresh_token;
-      secondSession.tokenParsed = parseJwt(data.access_token);
-
-      rawSecondAccess.value = data.access_token;
-      if (data.refresh_token) rawSecondRefresh.value = data.refresh_token;
-      jsonSecondAccess.textContent = JSON.stringify(secondSession.tokenParsed, null, 2);
-
-      alert('Токен Second Backend успешно обновлен через Refresh Token!');
-    } else {
-      alert(`Ошибка обновления: ${data.message || 'Не удалось обновить токен'}`);
-    }
-  } catch (err) {
-    alert(`Сетевая ошибка при обновлении токена Second: ${err.message}`);
-  } finally {
-    btnRefreshSecond.disabled = false;
-    btnRefreshSecond.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-      </svg>
-      Обновить токен через Second (POST /refresh)
-    `;
-  }
-}
-
-async function exchangeAccessTokenWithKeycloak() {
-  const token = rawAccess?.value || currentSession?.accessToken || keycloak?.token;
-  if (!token) {
-    alert('Нет доступного Access Token от Alem. Пожалуйста, выполните вход в систему.');
-    return;
-  }
-
-  secondExchangeError?.classList.add('hidden');
-  btnExchangeAccess.disabled = true;
-  btnExchangeAccess.textContent = 'Keycloak Exchange...';
-
-  try {
-    console.log(`[Second Backend] POST ${SECOND_API_BASE}/auth/exchange-access-token with subject_token`);
-    const resp = await fetch(`${SECOND_API_BASE}/auth/exchange-access-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access_token: token.trim() }),
-    });
-
-    const data = await resp.json();
-
-    if (resp.ok && data.access_token) {
-      secondSession = {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        tokenParsed: parseJwt(data.access_token),
-        user: data.user,
-      };
-
-      rawSecondAccess.value = data.access_token;
-      rawSecondRefresh.value = data.refresh_token || '';
-
-      secondMetaIss.textContent = secondSession.tokenParsed?.iss || 'http://localhost:8180/realms/GovApps';
-      secondMetaAud.textContent = Array.isArray(secondSession.tokenParsed?.aud)
-        ? secondSession.tokenParsed.aud.join(', ')
-        : (secondSession.tokenParsed?.aud || 'second-backend');
-      secondMetaSub.textContent = data.user?.sub || secondSession.tokenParsed?.sub || '—';
-      secondMetaUser.textContent = data.user?.username || secondSession.tokenParsed?.preferred_username || '—';
-      secondMetaExp.textContent = `${data.expires_in || 300} сек (${Math.round((data.expires_in || 300) / 60)} мин)`;
-      secondMetaRefreshExp.textContent = `${data.refresh_expires_in || 1800} сек (${Math.round((data.refresh_expires_in || 1800) / 60)} мин)`;
-
-      jsonSecondAccess.textContent = JSON.stringify(secondSession.tokenParsed, null, 2);
-
-      secondExchangeBadge.textContent = 'Exchanged via Keycloak (RFC 8693)';
-      secondExchangeBadge.className = 'badge badge-success';
-      secondExchangeResult?.classList.remove('hidden');
-
-      if (btnTestSecondApi) btnTestSecondApi.disabled = false;
-      if (btnRefreshSecond) btnRefreshSecond.disabled = false;
-    } else {
-      secondExchangeError.innerHTML = `
-        <strong>Ошибка Keycloak Token Exchange:</strong> ${data.message || 'Запрос отклонен'}
-        <p style="margin-top: 4px; font-size: 11px;">
-          Убедитесь, что клиент <code>second-backend</code> создан в Keycloak, и в клиенте <code>test-app</code> добавлен Mapper типа Audience для <code>second-backend</code>.
-        </p>
-      `;
-      secondExchangeError.classList.remove('hidden');
-    }
-  } catch (err) {
-    secondExchangeError.textContent = `Сетевая ошибка при обращении к Second Backend (${SECOND_API_BASE}): ${err.message}. Убедитесь, что сервис запущен на порту 8081.`;
-    secondExchangeError.classList.remove('hidden');
-  } finally {
-    btnExchangeAccess.disabled = false;
-    btnExchangeAccess.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-      </svg>
-      Keycloak Token Exchange (POST /exchange-access-token)
-    `;
-  }
-}
-
-// Event listeners for Second Backend
-btnExchangeSecond?.addEventListener('click', () => exchangeIdTokenWithSecond());
-btnExchangeAccess?.addEventListener('click', () => exchangeAccessTokenWithKeycloak());
-btnTestSecondApi?.addEventListener('click', () => testSecondProtectedApi());
-btnRefreshSecond?.addEventListener('click', () => refreshSecondToken());
-
-btnCopySecondAccess?.addEventListener('click', async () => {
-  if (!rawSecondAccess.value) return;
-  try {
-    await navigator.clipboard.writeText(rawSecondAccess.value);
-    alert('Second Access Token скопирован в буфер обмена!');
-  } catch {
-    alert('Не удалось скопировать токен');
-  }
-});
-
-btnCopySecondRefresh?.addEventListener('click', async () => {
-  if (!rawSecondRefresh.value) return;
-  try {
-    await navigator.clipboard.writeText(rawSecondRefresh.value);
-    alert('Second Refresh Token скопирован в буфер обмена!');
-  } catch {
-    alert('Не удалось скопировать токен');
-  }
 });
 
 // Inspector Tabs
@@ -1170,6 +877,335 @@ registerForm.addEventListener('submit', async (e) => {
   } finally {
     btnRegisterSubmit.disabled = false;
     btnRegisterSubmit.textContent = 'Register in Keycloak (POST /register)';
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Token Exchange (RFC 8693): токен alem → токен second-backend через Keycloak.
+// Три шага: ① second отклоняет токен alem, ② обмен в Keycloak, ③ second принимает новый токен.
+// ---------------------------------------------------------------------------
+const SECOND_CLIENT_ID = 'second-backend';
+
+const btnTeRunAll = document.getElementById('btn-te-run-all');
+const teSummary = document.getElementById('te-summary');
+const teCompare = document.getElementById('te-compare');
+const teCompareBody = document.getElementById('te-compare-body');
+const teCompareEmpty = document.getElementById('te-compare-empty');
+const btnTeIntrospectAlem = document.getElementById('btn-te-introspect-alem');
+const btnTeIntrospectSecond = document.getElementById('btn-te-introspect-second');
+const btnTeCopy = document.getElementById('btn-te-copy');
+const teRawSecond = document.getElementById('te-raw-second');
+const teLastTitle = document.getElementById('te-last-title');
+const teLastStatus = document.getElementById('te-last-status');
+const teLastJson = document.getElementById('te-last-json');
+
+const TE_COMPARE_FIELDS = [
+  ['azp', 'Кому выдан токен (клиент Keycloak)'],
+  ['aud', 'Для кого предназначен'],
+  ['iss', 'Кто выдал'],
+  ['sub', 'ID пользователя'],
+  ['preferred_username', 'Логин пользователя'],
+  ['scope', 'Права (scope)'],
+  ['exp', 'Действует до'],
+];
+
+const teSteps = [1, 2, 3].map((n) => ({
+  item: document.getElementById(`te-step-${n}`),
+  button: document.getElementById(`btn-te-step-${n}`),
+  result: document.getElementById(`te-result-${n}`),
+}));
+
+let teSecondToken = null;
+let teBusy = false;
+
+function getAlemAccessToken() {
+  return (rawAccess?.value || currentSession?.accessToken || keycloak?.token || '').trim();
+}
+
+function formatTime(epochSeconds) {
+  return epochSeconds ? new Date(epochSeconds * 1000).toLocaleTimeString() : '—';
+}
+
+function formatClaim(name, value) {
+  if (value === undefined || value === null) return '—';
+  if (name === 'exp' && typeof value === 'number') return formatTime(value);
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+}
+
+// state: idle | running | ok | fail
+function setStep(n, state, title, lines = []) {
+  const step = teSteps[n - 1];
+  step.item.dataset.state = state;
+  step.result.replaceChildren();
+
+  if (state === 'idle') {
+    step.result.classList.add('hidden');
+    return;
+  }
+
+  const icon = { running: '…', ok: '✔', fail: '✖' }[state];
+  const head = document.createElement('div');
+  head.className = 'te-result-title';
+  head.textContent = `${icon} ${title}`;
+  step.result.appendChild(head);
+
+  for (const line of lines) {
+    const row = document.createElement('div');
+    row.className = 'te-result-line';
+    row.textContent = line;
+    step.result.appendChild(row);
+  }
+  step.result.classList.remove('hidden');
+}
+
+function updateSummary() {
+  const states = teSteps.map((s) => s.item.dataset.state);
+  const failed = states.indexOf('fail');
+
+  if (states.every((state) => state === 'ok')) {
+    teSummary.textContent = '✔ Итог: Token Exchange работает. Second пускает только токен, полученный через Keycloak.';
+    teSummary.className = 'te-summary te-summary-ok';
+  } else if (failed !== -1) {
+    teSummary.textContent = `✖ Шаг ${failed + 1} не прошёл — подсказка в шаге выше.`;
+    teSummary.className = 'te-summary te-summary-fail';
+  } else {
+    teSummary.className = 'te-summary hidden';
+  }
+}
+
+function updateTeButtons() {
+  teSteps[2].button.disabled = teBusy || !teSecondToken;
+  teSteps[0].button.disabled = teBusy;
+  teSteps[1].button.disabled = teBusy;
+  btnTeRunAll.disabled = teBusy;
+  btnTeIntrospectSecond.disabled = !teSecondToken;
+  btnTeCopy.disabled = !teSecondToken;
+}
+
+function resetTokenExchangeUI() {
+  teSecondToken = null;
+  teBusy = false;
+  [1, 2, 3].forEach((n) => setStep(n, 'idle'));
+  updateSummary();
+  teCompare.classList.add('hidden');
+  teCompareEmpty.classList.remove('hidden');
+  teCompareBody.replaceChildren();
+  teRawSecond.value = '';
+  updateTeButtons();
+}
+
+function showLastResponse(title, status, body) {
+  teLastTitle.textContent = title;
+  teLastStatus.textContent = status === 0 ? 'нет ответа' : String(status);
+  teLastStatus.className = `badge ${status >= 200 && status < 300 ? 'badge-success' : 'badge-danger'}`;
+  teLastJson.textContent = typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+}
+
+// Возвращает { status, data }; status = 0, если сервис не ответил.
+async function callSecond(title, path, options) {
+  try {
+    const resp = await fetch(`${SECOND_API_BASE}${path}`, options);
+    const data = await resp.json().catch(() => ({}));
+    showLastResponse(title, resp.status, data);
+    return { status: resp.status, data };
+  } catch (err) {
+    showLastResponse(title, 0, err.message);
+    return { status: 0, data: null };
+  }
+}
+
+function postJson(body) {
+  return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+}
+
+function bearer(token) {
+  return { headers: { Authorization: `Bearer ${token}` } };
+}
+
+// Перевод ошибки API на понятный язык: [что случилось, что сделать]
+function explainError(status, data) {
+  const message = data?.message || '';
+  if (status === 0) {
+    return ['Сервис second (:8081) не отвечает.', 'Запустите его: docker compose up -d'];
+  }
+  if (message.includes('Keycloak (') || message.includes('JWKS Keycloak')) {
+    return ['Second не может связаться с Keycloak (:8180).', 'Проверьте, что контейнер keycloak запущен.'];
+  }
+  if (message.includes('(expiration)')) {
+    return ['Токен alem истёк.', 'Нажмите «Refresh» вверху страницы и повторите.'];
+  }
+  if (message.includes('Audience mapper')) {
+    return ['Токен alem не предназначен для second (в aud нет second-backend).',
+      'Keycloak → Clients → test-app → Client scopes → test-app-dedicated → добавьте Audience mapper «second-backend».'];
+  }
+  if (message.includes('Standard Token Exchange') || message.includes('Capability config')) {
+    return ['В Keycloak выключен обмен токенов для second-backend.',
+      'Keycloak → Clients → second-backend → Settings → Capability config → Standard Token Exchange: On.'];
+  }
+  if (message.includes('client-secret')) {
+    return ['Keycloak не принял пароль клиента second-backend (client secret).',
+      'Сверьте keycloak.client-secret в second с Clients → second-backend → Credentials.'];
+  }
+  if (message.includes('(signature)') || message.includes('(issuer)')) {
+    return ['Токен не прошёл проверку подписи или издателя.', message];
+  }
+  return [message || `Неожиданный ответ сервера (HTTP ${status}).`, 'Подробности — в «Подробнее» → Последний ответ API.'];
+}
+
+function failStep(n, title, status, data) {
+  const [what, todo] = explainError(status, data);
+  setStep(n, 'fail', title, [what, `Что сделать: ${todo}`]);
+  return false;
+}
+
+function requireAlemToken(n) {
+  const token = getAlemAccessToken();
+  if (!token) {
+    setStep(n, 'fail', 'Нет токена alem', ['Сначала войдите в систему.']);
+  }
+  return token;
+}
+
+async function runStep1() {
+  const token = requireAlemToken(1);
+  if (!token) return false;
+  setStep(1, 'running', 'Отправляем токен alem в second…');
+
+  const { status, data } = await callSecond('GET /api/second/me (токен alem)', '/second/me', bearer(token));
+  const azp = parseJwt(token).azp || '—';
+
+  if (status === 401 && data?.message?.includes('authorized_party')) {
+    setStep(1, 'ok', 'Second отклонил токен alem — так и должно быть', [
+      `Причина: токен выдан для «${azp}», а не для «${SECOND_CLIENT_ID}».`,
+    ]);
+    return true;
+  }
+  if (status === 200) {
+    setStep(1, 'fail', 'Second принял токен alem без обмена', [
+      'Так быть не должно: second обязан проверять, кому выдан токен (azp).',
+    ]);
+    return false;
+  }
+  return failStep(1, 'Не удалось проверить токен', status, data);
+}
+
+async function runStep2() {
+  const subjectToken = requireAlemToken(2);
+  if (!subjectToken) return false;
+
+  teSecondToken = null;
+  setStep(3, 'idle');
+  setStep(2, 'running', 'Обмениваем токен в Keycloak…');
+  updateTeButtons();
+
+  const { status, data } = await callSecond('POST /api/auth/token-exchange', '/auth/token-exchange',
+    postJson({ subject_token: subjectToken }));
+
+  if (status !== 200 || !data?.access_token) {
+    updateTeButtons();
+    return failStep(2, 'Keycloak не выдал новый токен', status, data);
+  }
+
+  teSecondToken = data.access_token;
+  teRawSecond.value = teSecondToken;
+
+  const before = parseJwt(subjectToken);
+  const after = parseJwt(teSecondToken);
+  const sameUser = before.sub === after.sub;
+  setStep(2, 'ok', 'Keycloak выдал новый токен для second', [
+    `Кому выдан: ${before.azp || '—'} → ${after.azp || '—'}`,
+    `Пользователь: ${after.preferred_username || after.sub || '—'} ${sameUser ? '(тот же)' : '(ИЗМЕНИЛСЯ!)'}`,
+    `Действует до: ${formatTime(after.exp)}`,
+  ]);
+  renderCompare(before, after);
+  updateTeButtons();
+  return true;
+}
+
+async function runStep3() {
+  if (!teSecondToken) {
+    setStep(3, 'fail', 'Нет токена second', ['Сначала выполните шаг 2.']);
+    return false;
+  }
+  setStep(3, 'running', 'Отправляем новый токен в second…');
+
+  const { status, data } = await callSecond('GET /api/second/me (токен second)', '/second/me', bearer(teSecondToken));
+
+  if (status === 200 && data?.success) {
+    const user = data.data?.user || {};
+    setStep(3, 'ok', 'Second принял новый токен', [
+      `Пользователь: ${user.username || '—'}${user.email ? ` (${user.email})` : ''}`,
+    ]);
+    return true;
+  }
+  return failStep(3, 'Second не принял новый токен', status, data);
+}
+
+function renderCompare(before, after) {
+  teCompareBody.replaceChildren();
+  for (const [field, meaning] of TE_COMPARE_FIELDS) {
+    const valueBefore = formatClaim(field, before[field]);
+    const valueAfter = formatClaim(field, after[field]);
+    const row = document.createElement('tr');
+    if (valueBefore !== valueAfter) row.className = 'te-changed';
+
+    [field, meaning, valueBefore, valueAfter].forEach((text, i) => {
+      const cell = document.createElement('td');
+      if (i === 1) {
+        cell.textContent = text;
+      } else {
+        const code = document.createElement('code');
+        code.textContent = text;
+        cell.appendChild(code);
+      }
+      row.appendChild(cell);
+    });
+    teCompareBody.appendChild(row);
+  }
+  teCompare.classList.remove('hidden');
+  teCompareEmpty.classList.add('hidden');
+}
+
+async function runTeStep(fn) {
+  if (teBusy) return false;
+  teBusy = true;
+  updateTeButtons();
+  try {
+    return await fn();
+  } finally {
+    teBusy = false;
+    updateTeButtons();
+    updateSummary();
+  }
+}
+
+btnTeRunAll?.addEventListener('click', () => runTeStep(async () => {
+  [1, 2, 3].forEach((n) => setStep(n, 'idle'));
+  return (await runStep1()) && (await runStep2()) && (await runStep3());
+}));
+teSteps[0].button?.addEventListener('click', () => runTeStep(runStep1));
+teSteps[1].button?.addEventListener('click', () => runTeStep(runStep2));
+teSteps[2].button?.addEventListener('click', () => runTeStep(runStep3));
+
+btnTeIntrospectAlem?.addEventListener('click', () => {
+  const token = getAlemAccessToken();
+  if (token) callSecond('POST /api/auth/token-exchange/introspect (токен alem)', '/auth/token-exchange/introspect', postJson({ token }));
+});
+btnTeIntrospectSecond?.addEventListener('click', () => {
+  if (teSecondToken) {
+    callSecond('POST /api/auth/token-exchange/introspect (токен second)', '/auth/token-exchange/introspect',
+      postJson({ token: teSecondToken }));
+  }
+});
+btnTeCopy?.addEventListener('click', async () => {
+  if (!teSecondToken) return;
+  try {
+    await navigator.clipboard.writeText(teSecondToken);
+    btnTeCopy.textContent = 'Скопировано';
+    setTimeout(() => { btnTeCopy.textContent = 'Copy'; }, 1500);
+  } catch (err) {
+    console.warn('Clipboard error:', err);
   }
 });
 
