@@ -1260,3 +1260,9 @@ body {
   color: #34d399;
   font-weight: 600;
 }
+
+/* SSO: сервисы */
+.sso-card .sso-links { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.sso-frame { width: 100%; height: 260px; border: 1px solid var(--card-border); border-radius: var(--radius); background: #fff; }
+.sso-error { margin: 8px 0; color: #f87171; font-size: 13px; white-space: pre-wrap; }
+.sso-note { margin-bottom: 16px; }
