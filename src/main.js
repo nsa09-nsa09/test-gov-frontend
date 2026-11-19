@@ -12,6 +12,12 @@ const SECOND_API_BASE = 'http://localhost:18641/api';
 
 const keycloak = new Keycloak(KEYCLOAK_CONFIG);
 
+// SSO: сессия alem хранится в localStorage только на тестовом стенде, чтобы её видели
+// новые вкладки и страница /sso/{service}, на которую сервис возвращает пользователя.
+const ALEM_SESSION_KEY = 'sso-test-alem-session';
+const SSO_PATH = window.location.pathname.match(/^\/sso\/([\w-]+)\/?$/);
+const pendingSsoService = SSO_PATH ? SSO_PATH[1] : null;
+
 // DOM Elements: Views
 const loadingView = document.getElementById('loading-view');
 const unauthView = document.getElementById('unauth-view');
@@ -140,6 +146,8 @@ async function init() {
         tokenParsed: keycloak.tokenParsed,
       };
       renderAuthenticated();
+    } else if (restoreAlemSession()) {
+      renderAuthenticated();
     } else {
       renderUnauthenticated();
     }
@@ -160,6 +168,7 @@ function renderUnauthenticated() {
 }
 
 function renderAuthenticated() {
+  void onSignedIn();
   resetTokenExchangeUI();
   unauthView.classList.add('hidden');
   authView.classList.remove('hidden');
@@ -282,6 +291,7 @@ btnLogout.addEventListener('click', async () => {
       console.warn('Alem logout request failed:', e);
     }
     currentSession = null;
+    localStorage.removeItem(ALEM_SESSION_KEY);
     renderUnauthenticated();
   } else {
     keycloak.logout();
@@ -306,6 +316,7 @@ btnRefresh.addEventListener('click', async () => {
         currentSession.accessToken = data.access_token;
         if (data.refresh_token) currentSession.refreshToken = data.refresh_token;
         currentSession.tokenParsed = parseJwt(data.access_token);
+        saveAlemSession();
         renderAuthenticated();
         alert('Token successfully refreshed via Alem Gateway!');
       } else {
@@ -780,6 +791,7 @@ directForm.addEventListener('submit', async (e) => {
         idToken: data.id_token || '',
         tokenParsed: parseJwt(data.access_token),
       };
+      saveAlemSession();
 
       // Switch to Authenticated Token Inspector View
       renderAuthenticated();
@@ -1208,6 +1220,105 @@ btnTeCopy?.addEventListener('click', async () => {
     console.warn('Clipboard error:', err);
   }
 });
+
+// ---------------------------------------------------------------------------
+// SSO: бесшовный вход в сервисы через second (гайд ai-gov-sso-plan.pdf)
+// ---------------------------------------------------------------------------
+const ssoFrame = document.getElementById('sso-ai-gov-frame');
+const ssoError = document.getElementById('sso-error');
+const ssoPendingNote = document.getElementById('sso-pending-note');
+
+function saveAlemSession() {
+  if (currentSession?.type !== 'alem') return;
+  localStorage.setItem(ALEM_SESSION_KEY, JSON.stringify({
+    accessToken: currentSession.accessToken,
+    refreshToken: currentSession.refreshToken,
+    idToken: currentSession.idToken,
+  }));
+}
+
+function restoreAlemSession() {
+  const raw = localStorage.getItem(ALEM_SESSION_KEY);
+  if (!raw) return false;
+  try {
+    const saved = JSON.parse(raw);
+    if (!saved.accessToken) return false;
+    currentSession = { type: 'alem', ...saved, tokenParsed: parseJwt(saved.accessToken) };
+    return true;
+  } catch {
+    localStorage.removeItem(ALEM_SESSION_KEY);
+    return false;
+  }
+}
+
+async function freshAccessToken() {
+  if (currentSession?.type === 'alem') {
+    const exp = currentSession.tokenParsed?.exp || 0;
+    if (exp - 30 < Date.now() / 1000 && currentSession.refreshToken) {
+      const resp = await fetch(`${ALEM_API_BASE}/refresh`, postJson({ refreshToken: currentSession.refreshToken }));
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.access_token) {
+        localStorage.removeItem(ALEM_SESSION_KEY);
+        throw new Error('Сессия alem истекла, войдите заново');
+      }
+      currentSession.accessToken = data.access_token;
+      if (data.refresh_token) currentSession.refreshToken = data.refresh_token;
+      currentSession.tokenParsed = parseJwt(data.access_token);
+      saveAlemSession();
+    }
+    return currentSession.accessToken;
+  }
+  await keycloak.updateToken(30);
+  return keycloak.token;
+}
+
+async function ssoStart(service) {
+  const token = await freshAccessToken();
+  const resp = await fetch(`${SECOND_API_BASE}/sso/${service}/start`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.url) {
+    throw new Error(`second ${resp.status}: ${data.message || 'нет url в ответе'}`);
+  }
+  return data.url;
+}
+
+function showSsoError(err) {
+  ssoError.textContent = err.message;
+  ssoError.classList.remove('hidden');
+}
+
+async function loadAiGovFrame() {
+  ssoError.classList.add('hidden');
+  try {
+    ssoFrame.src = await ssoStart('ai-gov');
+  } catch (err) {
+    showSsoError(err);
+  }
+}
+
+async function onSignedIn() {
+  if (pendingSsoService) {
+    ssoPendingNote.textContent = `Открываем ${pendingSsoService}…`;
+    ssoPendingNote.classList.remove('hidden');
+    try {
+      window.location.replace(await ssoStart(pendingSsoService));
+    } catch (err) {
+      ssoPendingNote.textContent = `Не удалось открыть ${pendingSsoService}: ${err.message}`;
+    }
+    return;
+  }
+  await loadAiGovFrame();
+}
+
+document.getElementById('btn-sso-reload-ai')?.addEventListener('click', () => loadAiGovFrame());
+
+if (pendingSsoService) {
+  ssoPendingNote.textContent = `Войдите, чтобы открыть ${pendingSsoService}.`;
+  ssoPendingNote.classList.remove('hidden');
+}
 
 // Run initial precheck on startup
 checkUser2FA(inputUsername.value.trim());

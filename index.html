@@ -48,6 +48,7 @@
         </div>
 
         <!-- Unauthenticated State -->
+        <div id="sso-pending-note" class="card sso-note hidden"></div>
         <div id="unauth-view" class="view-grid hidden">
           <!-- Flow 1: Standard Redirect (Auth Code + PKCE) -->
           <div class="card hero-card">
@@ -353,6 +354,22 @@
               <div class="claim-content monospace" id="claim-iss">—</div>
               <p class="claim-hint">Originating Keycloak authority URL.</p>
             </div>
+          </div>
+
+          <!-- Сервисы: бесшовный вход через second (start → одноразовый код → callback сервиса) -->
+          <div class="card sso-card">
+            <div class="card-tag card-tag-emerald">SSO · Сервисы</div>
+            <h2 class="card-title">Сервисы</h2>
+            <p class="card-desc">
+              Вход без пароля: second меняет ваш токен на токен сервиса и передаёт его через одноразовый код.
+            </p>
+            <div class="sso-links">
+              <a class="btn btn-outline btn-sm" href="/sso/documentolog" target="_blank" rel="noopener">Открыть test-documentolog ↗</a>
+              <a class="btn btn-outline btn-sm" href="/sso/eotinish" target="_blank" rel="noopener">Открыть test-eotinish ↗</a>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-sso-reload-ai">Перезагрузить ai-gov</button>
+            </div>
+            <div id="sso-error" class="sso-error hidden"></div>
+            <iframe id="sso-ai-gov-frame" class="sso-frame" title="test-ai-gov"></iframe>
           </div>
 
           <!-- Token Exchange: доступ ко второму сервису (second) через Keycloak, RFC 8693 -->
