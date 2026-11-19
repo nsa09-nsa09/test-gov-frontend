@@ -1234,6 +1234,7 @@ function saveAlemSession() {
     accessToken: currentSession.accessToken,
     refreshToken: currentSession.refreshToken,
     idToken: currentSession.idToken,
+    ourToken: currentSession.ourToken,
   }));
 }
 
@@ -1272,11 +1273,30 @@ async function freshAccessToken() {
   return keycloak.token;
 }
 
+// Наш токен: second выдаёт его через /api/auth/token-exchange, как прод-бэкенд выдаёт свою сессию.
+async function freshOurToken(alemToken) {
+  const exp = parseJwt(currentSession?.ourToken || '')?.exp || 0;
+  if (currentSession?.ourToken && exp - 30 > Date.now() / 1000) return currentSession.ourToken;
+  const resp = await fetch(`${SECOND_API_BASE}/auth/token-exchange`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${alemToken}` },
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.access_token) {
+    throw new Error(`second token-exchange ${resp.status}: ${data.message || 'нет access_token'}`);
+  }
+  currentSession.ourToken = data.access_token;
+  saveAlemSession();
+  return currentSession.ourToken;
+}
+
 async function ssoStart(service) {
-  const token = await freshAccessToken();
+  const alemToken = await freshAccessToken();
+  const ourToken = await freshOurToken(alemToken);
   const resp = await fetch(`${SECOND_API_BASE}/sso/${service}/start`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${ourToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alemToken }),
   });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok || !data.url) {
