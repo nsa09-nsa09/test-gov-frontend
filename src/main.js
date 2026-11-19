@@ -1,14 +1,14 @@
 import Keycloak from 'keycloak-js';
 
 const KEYCLOAK_CONFIG = {
-  url: 'http://localhost:8180',
+  url: 'http://localhost:18630',
   realm: 'GovApps',
   clientId: 'test-app',
 };
 
 // Alem Spring Boot BFF Gateway URL
-const ALEM_API_BASE = 'http://localhost:8080/api/auth';
-const SECOND_API_BASE = 'http://localhost:8081/api';
+const ALEM_API_BASE = 'http://localhost:18640/api/auth';
+const SECOND_API_BASE = 'http://localhost:18641/api';
 
 const keycloak = new Keycloak(KEYCLOAK_CONFIG);
 
@@ -1027,10 +1027,10 @@ function bearer(token) {
 function explainError(status, data) {
   const message = data?.message || '';
   if (status === 0) {
-    return ['Сервис second (:8081) не отвечает.', 'Запустите его: docker compose up -d'];
+    return ['Сервис second (:18641) не отвечает.', 'Запустите его: docker compose up -d'];
   }
   if (message.includes('Keycloak (') || message.includes('JWKS Keycloak')) {
-    return ['Second не может связаться с Keycloak (:8180).', 'Проверьте, что контейнер keycloak запущен.'];
+    return ['Second не может связаться с Keycloak (:18630).', 'Проверьте, что контейнер keycloak запущен.'];
   }
   if (message.includes('(expiration)')) {
     return ['Токен alem истёк.', 'Нажмите «Refresh» вверху страницы и повторите.'];
