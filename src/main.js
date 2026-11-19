@@ -258,12 +258,12 @@ function startExpiryTimer(expTimestamp) {
 
     if (remaining <= 0) {
       expiryTimer.textContent = 'Expired';
-      expiryTimer.style.color = '#ef4444';
+      expiryTimer.style.color = '#b91c1c';
     } else {
       const minutes = Math.floor(remaining / 60);
       const seconds = remaining % 60;
       expiryTimer.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-      expiryTimer.style.color = remaining < 60 ? '#f59e0b' : '#38bdf8';
+      expiryTimer.style.color = remaining < 60 ? '#b45309' : '#1d4ed8';
     }
   }
 
@@ -623,8 +623,8 @@ btnConfirmTotp?.addEventListener('click', async () => {
   if (!code || code.length !== 6) {
     if (directConfirmMsg) {
       directConfirmMsg.className = '';
-      directConfirmMsg.style.background = '#7f1d1d';
-      directConfirmMsg.style.color = '#fecaca';
+      directConfirmMsg.style.background = '#fef2f2';
+      directConfirmMsg.style.color = '#b91c1c';
       directConfirmMsg.textContent = 'Пожалуйста, введите 6 цифр из приложения Authenticator.';
       directConfirmMsg.classList.remove('hidden');
     }
@@ -651,8 +651,8 @@ btnConfirmTotp?.addEventListener('click', async () => {
     if (res.ok && data.success) {
       if (directConfirmMsg) {
         directConfirmMsg.className = '';
-        directConfirmMsg.style.background = '#064e3b';
-        directConfirmMsg.style.color = '#a7f3d0';
+        directConfirmMsg.style.background = '#ecfdf5';
+        directConfirmMsg.style.color = '#047857';
         directConfirmMsg.textContent = '✅ 2FA успешно активирована в Keycloak! Теперь вы можете войти.';
         directConfirmMsg.classList.remove('hidden');
       }
@@ -663,8 +663,8 @@ btnConfirmTotp?.addEventListener('click', async () => {
     } else {
       if (directConfirmMsg) {
         directConfirmMsg.className = '';
-        directConfirmMsg.style.background = '#7f1d1d';
-        directConfirmMsg.style.color = '#fecaca';
+        directConfirmMsg.style.background = '#fef2f2';
+        directConfirmMsg.style.color = '#b91c1c';
         directConfirmMsg.textContent = '❌ ' + (data.message || 'Неверный код подтверждения');
         directConfirmMsg.classList.remove('hidden');
       }
@@ -672,8 +672,8 @@ btnConfirmTotp?.addEventListener('click', async () => {
   } catch (err) {
     if (directConfirmMsg) {
       directConfirmMsg.className = '';
-      directConfirmMsg.style.background = '#7f1d1d';
-      directConfirmMsg.style.color = '#fecaca';
+      directConfirmMsg.style.background = '#fef2f2';
+      directConfirmMsg.style.color = '#b91c1c';
       directConfirmMsg.textContent = '❌ Ошибка сети: ' + err.message;
       directConfirmMsg.classList.remove('hidden');
     }
